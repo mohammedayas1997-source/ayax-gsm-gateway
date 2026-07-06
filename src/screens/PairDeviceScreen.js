@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  saveNativeDeviceCredentials,
 } from "react-native";
 
 import DeviceInfo from "react-native-device-info";
@@ -45,6 +46,7 @@ export default function PairDeviceScreen({ navigation }) {
 
       await saveDeviceToken(data.secretKey);
       await saveDeviceId(data.deviceId);
+      await saveNativeDeviceCredentials(data.deviceId, data.secretKey);
 
       Alert.alert(
         "Success",
