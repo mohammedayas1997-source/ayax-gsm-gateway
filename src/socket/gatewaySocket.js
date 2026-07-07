@@ -9,17 +9,18 @@ import { addLog } from "../services/logService";
 let socket = null;
 
 const handleCommand = async (command) => {
+  if (!command?.reference) {
+    console.log("Invalid command: missing reference");
+    return;
+  }
+
   try {
-    if (!command?.reference) {
-      console.log("Invalid command: missing reference");
-      addLog({
-        type: command.type,
-        reference: command.reference,
-        status: "RECEIVED",
-        message: "Command received",
-        });
-      return;
-    }
+    addLog({
+      type: command.type || "UNKNOWN",
+      reference: command.reference,
+      status: "RECEIVED",
+      message: "Command received",
+    });
 
     await sendCommandResult({
       reference: command.reference,
@@ -38,12 +39,13 @@ const handleCommand = async (command) => {
         status: "SUCCESSFUL",
         message: "SMS sent successfully",
       });
+
       addLog({
-  type: "SEND_SMS",
-  reference: command.reference,
-  status: "SUCCESSFUL",
-  message: "SMS sent successfully",
-});
+        type: "SEND_SMS",
+        reference: command.reference,
+        status: "SUCCESSFUL",
+        message: "SMS sent successfully",
+      });
 
       return;
     }
@@ -59,12 +61,13 @@ const handleCommand = async (command) => {
         status: "PROCESSING",
         message: "USSD command started on Android device",
       });
+
       addLog({
-  type: "USSD",
-  reference: command.reference,
-  status: "PROCESSING",
-  message: "USSD command started",
-});
+        type: "USSD",
+        reference: command.reference,
+        status: "PROCESSING",
+        message: "USSD command started",
+      });
 
       return;
     }
@@ -75,17 +78,18 @@ const handleCommand = async (command) => {
       message: `Unsupported command type: ${command.type}`,
     });
   } catch (error) {
+    addLog({
+      type: command.type || "UNKNOWN",
+      reference: command.reference,
+      status: "FAILED",
+      message: error.message || "Command failed",
+    });
+
     await sendCommandResult({
       reference: command.reference,
       status: "FAILED",
       message: error.message || "Command failed",
     });
-    addLog({
-  type: command.type || "UNKNOWN",
-  reference: command.reference,
-  status: "FAILED",
-  message: error.message || "Command failed",
-});
   }
 };
 
@@ -114,6 +118,8 @@ export const connectGatewaySocket = async () => {
 
   socket.on("connect", () => {
     console.log("Gateway socket connected:", socket.id);
+
+    socket.emit("join", deviceId);
 
     socket.emit("gateway-device-online", {
       deviceId,
