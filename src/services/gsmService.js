@@ -1,4 +1,6 @@
 import { NativeModules, PermissionsAndroid, Platform } from "react-native";
+import api from "../api/client";
+import { getDeviceId, getDeviceToken } from "../storage/deviceStorage";
 
 const { GsmModule } = NativeModules;
 
@@ -28,5 +30,36 @@ export const getSimInfo = async () => {
     throw new Error("GsmModule not linked");
   }
 
-  return GsmModule.getSimInfo();
+  const simInfo = await GsmModule.getSimInfo();
+
+  await syncSimsToBackend(simInfo);
+
+  return simInfo;
+};
+
+export const syncSimsToBackend = async (simInfo) => {
+  const deviceId = await getDeviceId();
+  const secretKey = await getDeviceToken();
+
+  if (!deviceId || !secretKey) {
+    throw new Error("Device not paired");
+  }
+
+  const sims = simInfo?.sims || [];
+
+  const res = await api.post("/gateway/sims/sync", {
+    deviceId,
+    secretKey,
+    sims: sims.map((sim) => ({
+      slotIndex: sim.slotIndex,
+      carrierName: sim.carrierName,
+      displayName: sim.displayName,
+      phoneNumber: sim.number || "",
+      countryIso: sim.countryIso,
+      mcc: sim.mcc,
+      mnc: sim.mnc,
+    })),
+  });
+
+  return res.data;
 };

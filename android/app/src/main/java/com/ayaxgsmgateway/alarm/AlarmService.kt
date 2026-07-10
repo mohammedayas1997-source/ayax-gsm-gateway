@@ -1,12 +1,10 @@
 package com.ayaxgsmgateway.alarm
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.Service
+import android.app.*
+import android.content.Context
 import android.content.Intent
-import android.media.AudioManager
-import android.media.MediaPlayer
+import android.media.*
+import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
@@ -19,9 +17,9 @@ class AlarmService : Service() {
     override fun onCreate() {
         super.onCreate()
 
-        val audio =
-            getSystemService(AUDIO_SERVICE) as AudioManager
+        startForeground(1001, createNotification())
 
+        val audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         audio.ringerMode = AudioManager.RINGER_MODE_NORMAL
 
         audio.setStreamVolume(
@@ -30,59 +28,52 @@ class AlarmService : Service() {
             0
         )
 
-        player = MediaPlayer.create(this, R.raw.alarm)
+        val alarmUri = try {
+            Uri.parse("android.resource://$packageName/${R.raw.alarm}")
+        } catch (e: Exception) {
+            RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+        }
 
-        player?.isLooping = true
-
-        player?.start()
-
-        startForeground(
-            1001,
-            createNotification()
-        )
+        player = MediaPlayer().apply {
+            setDataSource(applicationContext, alarmUri)
+            setAudioStreamType(AudioManager.STREAM_ALARM)
+            isLooping = true
+            prepare()
+            start()
+        }
     }
 
     private fun createNotification(): Notification {
-
         val channelId = "ayax_alarm"
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                channelId,
+                "Ayax Alarm",
+                NotificationManager.IMPORTANCE_HIGH
+            )
 
-            val channel =
-                NotificationChannel(
-                    channelId,
-                    "Ayax Alarm",
-                    NotificationManager.IMPORTANCE_HIGH
-                )
-
-            val manager =
-                getSystemService(NotificationManager::class.java)
-
+            val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)
         }
 
         return NotificationCompat.Builder(this, channelId)
             .setContentTitle("Ayax Security Alarm")
-            .setContentText("Alarm is running")
+            .setContentText("Gateway alarm is ringing")
             .setSmallIcon(R.mipmap.ic_launcher)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
     }
 
-    override fun onStartCommand(
-        intent: Intent?,
-        flags: Int,
-        startId: Int
-    ): Int {
-
-        return START_STICKY
-    }
-
     override fun onDestroy() {
-
         player?.stop()
         player?.release()
-
+        player = null
         super.onDestroy()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        return START_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
