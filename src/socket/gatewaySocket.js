@@ -5,10 +5,7 @@ import { sendSms } from "../services/smsService";
 import { sendUssd } from "../services/ussdService";
 import { addToQueue } from "../services/queueService";
 import { addLog } from "../services/logService";
-import {
-  startAlarm,
-  stopAlarm,
-} from "../services/deviceManagerService";
+import { startAlarm, stopAlarm } from "../services/deviceManagerService";
 import { lockDevice } from "../services/devicePolicyService";
 
 let socket = null;
@@ -28,24 +25,61 @@ const handleCommand = async (command) => {
     });
 
     if (command.type === "LOCK_DEVICE") {
+      await lockDevice();
 
-  await lockDevice();
+      await sendCommandResult({
+        reference: command.reference,
+        status: "SUCCESSFUL",
+        message: "Device locked successfully",
+      });
 
-  await sendCommandResult({
-    reference: command.reference,
-    status: "SUCCESSFUL",
-    message: "Device locked successfully",
-  });
+      addLog({
+        type: "LOCK_DEVICE",
+        reference: command.reference,
+        status: "SUCCESSFUL",
+        message: "Device locked remotely",
+      });
 
-  addLog({
-    type: "LOCK_DEVICE",
-    reference: command.reference,
-    status: "SUCCESSFUL",
-    message: "Device locked remotely",
-  });
+      return;
+    }
 
-  return;
-}
+    if (command.type === "START_ALARM") {
+      await startAlarm();
+
+      await sendCommandResult({
+        reference: command.reference,
+        status: "SUCCESSFUL",
+        message: "Alarm started successfully",
+      });
+
+      addLog({
+        type: "START_ALARM",
+        reference: command.reference,
+        status: "SUCCESSFUL",
+        message: "Alarm started remotely",
+      });
+
+      return;
+    }
+
+    if (command.type === "STOP_ALARM") {
+      await stopAlarm();
+
+      await sendCommandResult({
+        reference: command.reference,
+        status: "SUCCESSFUL",
+        message: "Alarm stopped successfully",
+      });
+
+      addLog({
+        type: "STOP_ALARM",
+        reference: command.reference,
+        status: "SUCCESSFUL",
+        message: "Alarm stopped remotely",
+      });
+
+      return;
+    }
 
     await sendCommandResult({
       reference: command.reference,
@@ -59,7 +93,7 @@ const handleCommand = async (command) => {
         message: command.message,
         simSlot: command.simSlot,
         reference: command.reference,
-        });
+      });
 
       await sendCommandResult({
         reference: command.reference,
@@ -120,31 +154,6 @@ const handleCommand = async (command) => {
     });
   }
 };
-if (command.type === "START_ALARM") {
-
-  await startAlarm();
-
-  await sendCommandResult({
-    reference: command.reference,
-    status: "SUCCESSFUL",
-    message: "Alarm started successfully",
-  });
-
-  return;
-}
-
-if (command.type === "STOP_ALARM") {
-
-  await stopAlarm();
-
-  await sendCommandResult({
-    reference: command.reference,
-    status: "SUCCESSFUL",
-    message: "Alarm stopped successfully",
-  });
-
-  return;
-}
 
 const queuedCommandHandler = (command) => {
   addToQueue(command, handleCommand);
