@@ -41,17 +41,14 @@
         </service>
 
         <service
-          android:name=".alarm.AlarmService"
-          android:foregroundServiceType="mediaPlayback"
-          android:exported="false" />
-        </service>
+            android:name=".alarm.AlarmService"
+            android:foregroundServiceType="mediaPlayback"
+            android:exported="false" />
 
         <service
-    android:name=".security.MotionService"
-    android:foregroundServiceType="dataSync"
-    android:exported="false" />
-
-        </service>
+            android:name=".security.MotionService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false" />
 
         <receiver
             android:name=".BootReceiver"
@@ -73,51 +70,46 @@
         </receiver>
 
         <receiver
-    android:name=".mdm.AyaxDeviceAdminReceiver"
-    android:permission="android.permission.BIND_DEVICE_ADMIN"
-    android:exported="true">
-    <meta-data
-        android:name="android.app.device_admin"
-        android:resource="@xml/device_admin_receiver" />
+            android:name=".mdm.AyaxDeviceAdminReceiver"
+            android:permission="android.permission.BIND_DEVICE_ADMIN"
+            android:exported="true">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin_receiver" />
 
-    <intent-filter>
-        <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
-    </intent-filter>
-</receiver>
-
-        <receiver
-    android:name=".security.TheftReceiver"
-    android:exported="true">
-
-    <intent-filter>
-
-        <action android:name="android.intent.action.ACTION_POWER_CONNECTED"/>
-
-        <action android:name="android.intent.action.ACTION_POWER_DISCONNECTED"/>
-
-    </intent-filter>
-
-</receiver>
-
-<receiver
-    android:name=".security.DeviceStateReceiver"
-    android:exported="true">
-    <intent-filter>
-        <action android:name="android.intent.action.AIRPLANE_MODE" />
-        <action android:name="android.intent.action.SIM_STATE_CHANGED" />
-        <action android:name="android.location.PROVIDERS_CHANGED" />
-        <action android:name="android.net.conn.CONNECTIVITY_CHANGE" />
-    </intent-filter>
-</receiver>
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
 
         <receiver
-          android:name=".sms.SmsStatusReceiver"
-          android:exported="false">
-          <intent-filter>
-              <action android:name="AYAX_SMS_SENT" />
-              <action android:name="AYAX_SMS_DELIVERED" />
-          </intent-filter>
-      </receiver>
+            android:name=".security.TheftReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.ACTION_POWER_CONNECTED" />
+                <action android:name="android.intent.action.ACTION_POWER_DISCONNECTED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".security.DeviceStateReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.AIRPLANE_MODE" />
+                <action android:name="android.intent.action.SIM_STATE_CHANGED" />
+                <action android:name="android.location.PROVIDERS_CHANGED" />
+                <action android:name="android.net.conn.CONNECTIVITY_CHANGE" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".sms.SmsStatusReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="AYAX_SMS_SENT" />
+                <action android:name="AYAX_SMS_DELIVERED" />
+            </intent-filter>
+        </receiver>
 
         <activity
             android:name=".MainActivity"
