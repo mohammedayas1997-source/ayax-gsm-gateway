@@ -7,12 +7,10 @@ const { GsmModule } = NativeModules;
 export const requestGsmPermissions = async () => {
   if (Platform.OS !== "android") return true;
 
-  const permissions = [
+  const result = await PermissionsAndroid.requestMultiple([
     PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE,
     PermissionsAndroid.PERMISSIONS.READ_PHONE_NUMBERS,
-  ];
-
-  const result = await PermissionsAndroid.requestMultiple(permissions);
+  ]);
 
   return Object.values(result).every(
     (status) => status === PermissionsAndroid.RESULTS.GRANTED
@@ -51,13 +49,13 @@ export const syncSimsToBackend = async (simInfo) => {
     deviceId,
     secretKey,
     sims: sims.map((sim) => ({
-      slotIndex: sim.slotIndex,
-      carrierName: sim.carrierName,
-      displayName: sim.displayName,
+      slotIndex: Number(sim.slotIndex),
+      carrierName: sim.carrierName || "Unknown",
+      displayName: sim.displayName || "Unknown",
       phoneNumber: sim.number || "",
-      countryIso: sim.countryIso,
-      mcc: sim.mcc,
-      mnc: sim.mnc,
+      countryIso: sim.countryIso || "",
+      mcc: sim.mcc || null,
+      mnc: sim.mnc || null,
     })),
   });
 
