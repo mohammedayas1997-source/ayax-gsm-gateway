@@ -2,17 +2,21 @@ import BackgroundService from "react-native-background-actions";
 import { sendHeartbeat } from "./heartbeatService";
 import { connectGatewaySocket } from "../socket/gatewaySocket";
 import { getSimInfo } from "./gsmService";
+import { syncLocationToBackend } from "./locationService";
+import { startMotionSecurity } from "./deviceManagerService";
 
 const sleep = (time) =>
   new Promise((resolve) => setTimeout(resolve, time));
 
 const gatewayTask = async () => {
   await connectGatewaySocket();
+  await startMotionSecurity();
 
   while (BackgroundService.isRunning()) {
     try {
       await sendHeartbeat();
       await getSimInfo();
+      await syncLocationToBackend();
     } catch (error) {
       console.log("Background gateway error:", error.message);
     }
@@ -24,7 +28,7 @@ const gatewayTask = async () => {
 const options = {
   taskName: "Ayax GSM Gateway",
   taskTitle: "Ayax GSM Gateway Running",
-  taskDesc: "Listening for SMS, USSD and gateway commands.",
+  taskDesc: "Monitoring SMS, USSD, GPS, security and gateway commands.",
   taskIcon: {
     name: "ic_launcher",
     type: "mipmap",

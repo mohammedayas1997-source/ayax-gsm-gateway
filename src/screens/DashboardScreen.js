@@ -15,9 +15,11 @@ import {
   connectGatewaySocket,
   disconnectGatewaySocket,
 } from "../socket/gatewaySocket";
-
+import { syncSimsToBackend } from "../services/simSyncService";
+import { syncLocationToBackend } from "../services/locationService";
 import { subscribeQueueStatus } from "../services/queueService";
 import { subscribeLogs } from "../services/logService";
+import { startMotionSecurity } from "../services/deviceManagerService";
 
 export default function DashboardScreen({ navigation }) {
   const [status, setStatus] = useState("Connecting...");
@@ -53,11 +55,17 @@ export default function DashboardScreen({ navigation }) {
   const syncGateway = async () => {
     await heartbeat();
     await loadSimInfo();
+    await syncSimsToBackend();
+    await syncLocationToBackend();
   };
 
   useEffect(() => {
     syncGateway();
     connectGatewaySocket();
+    startMotionSecurity().catch((error) => {
+  console.log("Motion security error:", error.message);
+});
+    
 
     const unsubscribeQueue = subscribeQueueStatus(setQueueStatus);
     const unsubscribeLogs = subscribeLogs(setLogs);

@@ -8,6 +8,8 @@ import com.facebook.react.bridge.*
 import android.telephony.SmsManager
 import android.content.Intent
 import android.net.Uri
+import com.ayaxgsmgateway.gsm.helpers.SmsHelper
+import com.ayaxgsmgateway.gsm.helpers.UssdHelper
 
 class GsmModule(private val reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
@@ -48,6 +50,39 @@ fun sendSms(phoneNumber: String, message: String, promise: Promise) {
   } catch (e: Exception) {
     promise.reject("SMS_ERROR", e.message)
   }
+}
+@ReactMethod
+fun sendSmsWithSim(
+    phoneNumber: String,
+    message: String,
+    simSlot: Int,
+    reference: String,
+    deviceId: String,
+    secretKey: String,
+    promise: Promise
+) {
+    try {
+        SmsHelper.sendSms(
+            reactContext,
+            phoneNumber,
+            message,
+            simSlot,
+            reference,
+            deviceId,
+            secretKey
+        )
+
+        val result = Arguments.createMap()
+        result.putBoolean("success", true)
+        result.putString("phoneNumber", phoneNumber)
+        result.putString("message", message)
+        result.putInt("simSlot", simSlot)
+        result.putString("reference", reference)
+
+        promise.resolve(result)
+    } catch (e: Exception) {
+        promise.reject("SMS_ERROR", e.message)
+    }
 }
 @ReactMethod
 fun sendUssd(
@@ -92,6 +127,82 @@ fun sendUssd(
   } catch (e: Exception) {
     promise.reject("USSD_ERROR", e.message)
   }
+}
+@ReactMethod
+fun sendUssdWithSim(
+    ussdCode: String,
+    reference: String,
+    deviceId: String,
+    secretKey: String,
+    simSlot: Int,
+    promise: Promise
+) {
+
+    try {
+
+        val prefs =
+            reactContext.getSharedPreferences(
+                "AYAX_USSD",
+                Context.MODE_PRIVATE
+            )
+
+        prefs.edit()
+            .putString("reference", reference)
+            .putString("deviceId", deviceId)
+            .putString("secretKey", secretKey)
+            .apply()
+
+        UssdHelper.sendUssd(
+
+            reactContext,
+
+            ussdCode,
+
+            simSlot,
+
+            { response ->
+
+                val map =
+                    Arguments.createMap()
+
+                map.putBoolean(
+                    "success",
+                    true
+                )
+
+                map.putString(
+                    "response",
+                    response
+                )
+
+                map.putInt(
+                    "simSlot",
+                    simSlot
+                )
+
+                promise.resolve(map)
+
+            },
+
+            { error ->
+
+                promise.reject(
+                    "USSD_ERROR",
+                    error
+                )
+
+            }
+
+        )
+
+    } catch (e: Exception) {
+
+        promise.reject(
+            "USSD_ERROR",
+            e.message
+        )
+
+    }
 }
 
 @ReactMethod

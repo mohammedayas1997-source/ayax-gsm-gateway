@@ -13,7 +13,11 @@ export const requestUssdPermission = async () => {
   return result === PermissionsAndroid.RESULTS.GRANTED;
 };
 
-export const sendUssd = async ({ ussdCode, reference }) => {
+export const sendUssd = async ({
+  ussdCode,
+  reference,
+  simSlot = 0,
+}) => {
   const granted = await requestUssdPermission();
 
   if (!granted) {
@@ -29,6 +33,16 @@ export const sendUssd = async ({ ussdCode, reference }) => {
 
   if (!GsmModule) {
     throw new Error("GsmModule not linked");
+  }
+
+  if (GsmModule.sendUssdWithSim) {
+    return GsmModule.sendUssdWithSim(
+      ussdCode,
+      reference,
+      deviceId,
+      secretKey,
+      Number(simSlot)
+    );
   }
 
   return GsmModule.sendUssd(ussdCode, reference, deviceId, secretKey);

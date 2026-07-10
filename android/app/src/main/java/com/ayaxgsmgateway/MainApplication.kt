@@ -7,7 +7,9 @@ import com.facebook.react.ReactApplication
 import com.facebook.react.ReactHost
 import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
-
+import com.ayaxgsmgateway.location.LocationPackage
+import com.ayaxgsmgateway.device.DeviceManagerPackage
+import com.ayaxgsmgateway.mdm.DevicePolicyPackage
 class MainApplication : Application(), ReactApplication {
 
   override val reactHost: ReactHost by lazy {
@@ -16,6 +18,9 @@ class MainApplication : Application(), ReactApplication {
       packageList =
         PackageList(this).packages.apply {
           add(GsmPackage())
+          add(LocationPackage())
+          add(DeviceManagerPackage())
+          add(DevicePolicyPackage())
         },
     )
   }
