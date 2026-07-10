@@ -5,6 +5,7 @@ import com.facebook.react.bridge.*
 import com.ayaxgsmgateway.alarm.AlarmService
 import com.ayaxgsmgateway.security.NetworkMonitor
 import com.ayaxgsmgateway.security.GpsMonitor
+import com.ayaxgsmgateway.security.MotionService
 
 class DeviceManagerModule(
     private val reactContext: ReactApplicationContext
@@ -17,16 +18,9 @@ class DeviceManagerModule(
     @ReactMethod
     fun startAlarm(promise: Promise) {
         try {
-            val intent =
-                Intent(
-                    reactContext,
-                    AlarmService::class.java
-                )
-
+            val intent = Intent(reactContext, AlarmService::class.java)
             reactContext.startForegroundService(intent)
-
             promise.resolve(true)
-
         } catch (e: Exception) {
             promise.reject("ALARM_START_ERROR", e.message)
         }
@@ -35,45 +29,26 @@ class DeviceManagerModule(
     @ReactMethod
     fun stopAlarm(promise: Promise) {
         try {
-            val intent =
-                Intent(
-                    reactContext,
-                    AlarmService::class.java
-                )
-
+            val intent = Intent(reactContext, AlarmService::class.java)
             reactContext.stopService(intent)
-
             promise.resolve(true)
-
         } catch (e: Exception) {
             promise.reject("ALARM_STOP_ERROR", e.message)
         }
     }
-}
 
-@ReactMethod
-fun startMotionSecurity(promise: Promise) {
-    try {
+    @ReactMethod
+    fun startMotionSecurity(promise: Promise) {
+        try {
+            val intent = Intent(reactContext, MotionService::class.java)
+            reactContext.startForegroundService(intent)
 
-        val intent =
-            Intent(
-                reactContext,
-                com.ayaxgsmgateway.security.MotionService::class.java
-            )
+            NetworkMonitor.start(reactContext)
+            GpsMonitor.checkGps(reactContext)
 
-        reactContext.startForegroundService(intent)
-
-        NetworkMonitor.start(reactContext)
-        GpsMonitor.checkGps(reactContext)
-
-        promise.resolve(true)
-
-    } catch (e: Exception) {
-
-        promise.reject(
-            "MOTION_START_ERROR",
-            e.message
-        )
-
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("MOTION_START_ERROR", e.message)
+        }
     }
 }
