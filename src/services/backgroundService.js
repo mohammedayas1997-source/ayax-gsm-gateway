@@ -1,7 +1,7 @@
 import BackgroundService from "react-native-background-actions";
 import { sendHeartbeat } from "./heartbeatService";
 import { connectGatewaySocket } from "../socket/gatewaySocket";
-import { getSimInfo } from "./gsmService";
+import { syncSimInfo } from "./gsmService";
 import { syncLocationToBackend } from "./locationService";
 import { startMotionSecurity } from "./deviceManagerService";
 
@@ -15,7 +15,7 @@ const gatewayTask = async () => {
   while (BackgroundService.isRunning()) {
     try {
       await sendHeartbeat();
-      await getSimInfo();
+      await syncSimInfo();
       await syncLocationToBackend();
     } catch (error) {
       console.log("Background gateway error:", error.message);

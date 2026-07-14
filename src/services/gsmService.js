@@ -1,6 +1,14 @@
-import { NativeModules, PermissionsAndroid, Platform } from "react-native";
+import {
+  NativeModules,
+  PermissionsAndroid,
+  Platform,
+} from "react-native";
+
 import api from "../api/client";
-import { getDeviceId, getDeviceToken } from "../storage/deviceStorage";
+import {
+  getDeviceId,
+  getDeviceToken,
+} from "../storage/deviceStorage";
 
 const { GsmModule } = NativeModules;
 
@@ -13,7 +21,8 @@ export const requestGsmPermissions = async () => {
   ]);
 
   return Object.values(result).every(
-    (status) => status === PermissionsAndroid.RESULTS.GRANTED
+    (status) =>
+      status === PermissionsAndroid.RESULTS.GRANTED
   );
 };
 
@@ -28,14 +37,10 @@ export const getSimInfo = async () => {
     throw new Error("GsmModule not linked");
   }
 
-  const simInfo = await GsmModule.getSimInfo();
-
-  await syncSimsToBackend(simInfo);
-
-  return simInfo;
+  return GsmModule.getSimInfo();
 };
 
-export const syncSimsToBackend = async (simInfo) => {
+export const syncSimInfo = async () => {
   const deviceId = await getDeviceId();
   const secretKey = await getDeviceToken();
 
@@ -43,21 +48,43 @@ export const syncSimsToBackend = async (simInfo) => {
     throw new Error("Device not paired");
   }
 
-  const sims = simInfo?.sims || [];
+  const simInfo = await getSimInfo();
+  const sims = Array.isArray(simInfo?.sims)
+    ? simInfo.sims
+    : [];
 
-  const res = await api.post("/gateway/sims/sync", {
+  if (sims.length === 0) {
+    throw new Error("No active SIM cards found");
+  }
+
+  const payload = {
     deviceId,
     secretKey,
     sims: sims.map((sim) => ({
       slotIndex: Number(sim.slotIndex),
+      subscriptionId: Number(sim.subscriptionId),
       carrierName: sim.carrierName || "Unknown",
       displayName: sim.displayName || "Unknown",
       phoneNumber: sim.number || "",
       countryIso: sim.countryIso || "",
-      mcc: sim.mcc || null,
-      mnc: sim.mnc || null,
+      mcc:
+        sim.mcc === null || sim.mcc === undefined
+          ? null
+          : Number(sim.mcc),
+      mnc:
+        sim.mnc === null || sim.mnc === undefined
+          ? null
+          : Number(sim.mnc),
     })),
-  });
+  };
 
-  return res.data;
+  const response = await api.post(
+    "/gateway/sims/sync",
+    payload
+  );
+
+  return {
+    ...simInfo,
+    syncResult: response.data,
+  };
 };
