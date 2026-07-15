@@ -1,7 +1,16 @@
 import api from "../api/client";
-import { getDeviceId, getDeviceToken } from "../storage/deviceStorage";
+import {
+  getDeviceId,
+  getDeviceToken,
+} from "../storage/deviceStorage";
 
-export const sendCommandResult = async ({ reference, status, message }) => {
+export const sendCommandResult = async ({
+  reference,
+  status,
+  message,
+  response,
+  simSlot,
+}) => {
   const deviceId = await getDeviceId();
   const secretKey = await getDeviceToken();
 
@@ -14,7 +23,12 @@ export const sendCommandResult = async ({ reference, status, message }) => {
     secretKey,
     reference,
     status,
-    message,
+    message: message || response || "",
+    response: response || message || "",
+    simSlot:
+      simSlot === undefined || simSlot === null
+        ? undefined
+        : Number(simSlot),
   });
 
   return res.data;

@@ -19,8 +19,8 @@ object UssdHelper {
     ) {
         try {
             if (
-                context.checkSelfPermission(Manifest.permission.CALL_PHONE)
-                != PackageManager.PERMISSION_GRANTED
+                context.checkSelfPermission(Manifest.permission.CALL_PHONE) !=
+                PackageManager.PERMISSION_GRANTED
             ) {
                 onError("CALL_PHONE permission not granted")
                 return
@@ -28,6 +28,11 @@ object UssdHelper {
 
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
                 onError("USSD callback requires Android 8.0 or above")
+                return
+            }
+
+            if (ussdCode.isBlank()) {
+                onError("USSD code is required")
                 return
             }
 
@@ -47,12 +52,23 @@ object UssdHelper {
             simTelephonyManager.sendUssdRequest(
                 ussdCode,
                 object : TelephonyManager.UssdResponseCallback() {
+
                     override fun onReceiveUssdResponse(
                         telephonyManager: TelephonyManager?,
                         request: String?,
                         response: CharSequence?
                     ) {
-                        onSuccess(response?.toString() ?: "USSD response received")
+                        val message = response
+                            ?.toString()
+                            ?.trim()
+                            .orEmpty()
+
+                        if (message.isBlank()) {
+                            onError("Empty USSD response received")
+                            return
+                        }
+
+                        onSuccess(message)
                     }
 
                     override fun onReceiveUssdResponseFailed(
@@ -60,13 +76,15 @@ object UssdHelper {
                         request: String?,
                         failureCode: Int
                     ) {
-                        onError("USSD failed with code: $failureCode")
+                        onError(
+                            "USSD failed with code: $failureCode"
+                        )
                     }
                 },
                 Handler(Looper.getMainLooper())
             )
-        } catch (e: Exception) {
-            onError(e.message ?: "USSD failed")
+        } catch (error: Exception) {
+            onError(error.message ?: "USSD failed")
         }
     }
 }

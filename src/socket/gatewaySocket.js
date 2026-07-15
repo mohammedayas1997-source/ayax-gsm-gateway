@@ -111,28 +111,35 @@ const handleCommand = async (command) => {
       return;
     }
 
-    if (command.type === "USSD") {
-      await sendUssd({
-        ussdCode: command.ussdCode,
-        reference: command.reference,
-        simSlot: command.simSlot,
-      });
+if (command.type === "USSD") {
+  const result = await sendUssd({
+    ussdCode: command.ussdCode,
+    reference: command.reference,
+    simSlot: command.simSlot,
+  });
 
-      await sendCommandResult({
-        reference: command.reference,
-        status: "PROCESSING",
-        message: "USSD command started on Android device",
-      });
+  const ussdResponse =
+    result?.response ||
+    result?.message ||
+    "USSD completed successfully";
 
-      addLog({
-        type: "USSD",
-        reference: command.reference,
-        status: "PROCESSING",
-        message: "USSD command started",
-      });
+  await sendCommandResult({
+    reference: command.reference,
+    status: "SUCCESSFUL",
+    message: ussdResponse,
+    response: ussdResponse,
+    simSlot: Number(command.simSlot ?? 0),
+  });
 
-      return;
-    }
+  addLog({
+    type: "USSD",
+    reference: command.reference,
+    status: "SUCCESSFUL",
+    message: ussdResponse,
+  });
+
+  return;
+}
 
     await sendCommandResult({
       reference: command.reference,
