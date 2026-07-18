@@ -16,39 +16,43 @@ class DeviceManagerModule(
     }
 
     @ReactMethod
-    fun startAlarm(promise: Promise) {
-        try {
-            val intent = Intent(reactContext, AlarmService::class.java)
-            reactContext.startForegroundService(intent)
-            promise.resolve(true)
-        } catch (e: Exception) {
-            promise.reject("ALARM_START_ERROR", e.message)
+fun startAlarm(promise: Promise) {
+    try {
+        val intent = Intent(
+            reactContext,
+            AlarmService::class.java
+        ).apply {
+            action = AlarmService.ACTION_START
         }
+
+        reactContext.startForegroundService(intent)
+        promise.resolve(true)
+    } catch (error: Exception) {
+        promise.reject(
+            "ALARM_START_ERROR",
+            error.message,
+            error
+        )
     }
+}
 
-    @ReactMethod
-    fun stopAlarm(promise: Promise) {
-        try {
-            val intent = Intent(reactContext, AlarmService::class.java)
-            reactContext.stopService(intent)
-            promise.resolve(true)
-        } catch (e: Exception) {
-            promise.reject("ALARM_STOP_ERROR", e.message)
+@ReactMethod
+fun stopAlarm(promise: Promise) {
+    try {
+        val intent = Intent(
+            reactContext,
+            AlarmService::class.java
+        ).apply {
+            action = AlarmService.ACTION_STOP
         }
-    }
 
-    @ReactMethod
-    fun startMotionSecurity(promise: Promise) {
-        try {
-            val intent = Intent(reactContext, MotionService::class.java)
-            reactContext.startForegroundService(intent)
-
-            NetworkMonitor.start(reactContext)
-            GpsMonitor.checkGps(reactContext)
-
-            promise.resolve(true)
-        } catch (e: Exception) {
-            promise.reject("MOTION_START_ERROR", e.message)
-        }
+        reactContext.startService(intent)
+        promise.resolve(true)
+    } catch (error: Exception) {
+        promise.reject(
+            "ALARM_STOP_ERROR",
+            error.message,
+            error
+        )
     }
 }

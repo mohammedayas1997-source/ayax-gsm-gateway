@@ -115,13 +115,17 @@ if (command.type === "USSD") {
   const result = await sendUssd({
     ussdCode: command.ussdCode,
     reference: command.reference,
-    simSlot: command.simSlot,
+    simSlot: Number(command.simSlot ?? 0),
   });
 
   const ussdResponse =
     result?.response ||
     result?.message ||
-    "USSD completed successfully";
+    "";
+
+  if (!ussdResponse) {
+    throw new Error("Empty USSD response");
+  }
 
   await sendCommandResult({
     reference: command.reference,
@@ -140,7 +144,6 @@ if (command.type === "USSD") {
 
   return;
 }
-
     await sendCommandResult({
       reference: command.reference,
       status: "FAILED",
