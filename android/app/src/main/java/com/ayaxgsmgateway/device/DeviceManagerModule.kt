@@ -3,9 +3,9 @@ package com.ayaxgsmgateway.device
 import android.content.Intent
 import com.facebook.react.bridge.*
 import com.ayaxgsmgateway.alarm.AlarmService
+import com.ayaxgsmgateway.security.MotionService
 import com.ayaxgsmgateway.security.NetworkMonitor
 import com.ayaxgsmgateway.security.GpsMonitor
-import com.ayaxgsmgateway.security.MotionService
 
 class DeviceManagerModule(
     private val reactContext: ReactApplicationContext
@@ -16,43 +16,95 @@ class DeviceManagerModule(
     }
 
     @ReactMethod
-fun startAlarm(promise: Promise) {
-    try {
-        val intent = Intent(
-            reactContext,
-            AlarmService::class.java
-        ).apply {
-            action = AlarmService.ACTION_START
-        }
+    fun startAlarm(promise: Promise) {
+        try {
+            val intent = Intent(
+                reactContext,
+                AlarmService::class.java
+            ).apply {
+                action = AlarmService.ACTION_START
+            }
 
-        reactContext.startForegroundService(intent)
-        promise.resolve(true)
-    } catch (error: Exception) {
-        promise.reject(
-            "ALARM_START_ERROR",
-            error.message,
-            error
-        )
+            reactContext.startForegroundService(intent)
+            promise.resolve(true)
+
+        } catch (error: Exception) {
+            promise.reject(
+                "ALARM_START_ERROR",
+                error.message,
+                error
+            )
+        }
     }
-}
 
-@ReactMethod
-fun stopAlarm(promise: Promise) {
-    try {
-        val intent = Intent(
-            reactContext,
-            AlarmService::class.java
-        ).apply {
-            action = AlarmService.ACTION_STOP
+    @ReactMethod
+    fun stopAlarm(promise: Promise) {
+        try {
+            val intent = Intent(
+                reactContext,
+                AlarmService::class.java
+            ).apply {
+                action = AlarmService.ACTION_STOP
+            }
+
+            reactContext.startService(intent)
+            promise.resolve(true)
+
+        } catch (error: Exception) {
+            promise.reject(
+                "ALARM_STOP_ERROR",
+                error.message,
+                error
+            )
         }
+    }
 
-        reactContext.startService(intent)
-        promise.resolve(true)
-    } catch (error: Exception) {
-        promise.reject(
-            "ALARM_STOP_ERROR",
-            error.message,
-            error
-        )
+    @ReactMethod
+    fun startMotionSecurity(promise: Promise) {
+        try {
+
+            val intent = Intent(
+                reactContext,
+                MotionService::class.java
+            )
+
+            reactContext.startForegroundService(intent)
+
+            NetworkMonitor.start(reactContext)
+            GpsMonitor.checkGps(reactContext)
+
+            promise.resolve(true)
+
+        } catch (error: Exception) {
+
+            promise.reject(
+                "MOTION_START_ERROR",
+                error.message,
+                error
+            )
+        }
+    }
+
+    @ReactMethod
+    fun stopMotionSecurity(promise: Promise) {
+        try {
+
+            val intent = Intent(
+                reactContext,
+                MotionService::class.java
+            )
+
+            reactContext.stopService(intent)
+
+            promise.resolve(true)
+
+        } catch (error: Exception) {
+
+            promise.reject(
+                "MOTION_STOP_ERROR",
+                error.message,
+                error
+            )
+        }
     }
 }
