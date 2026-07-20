@@ -20,7 +20,7 @@ class AlarmService : Service() {
 
     companion object {
         const val ACTION_START = "com.ayaxgsmgateway.alarm.START"
-        const val ACTION_STOP = "com.ayaxgsmgateway.alarm.STOP"
+        const val ACTION_STOP = "com.ayaxgsmateway.alarm.STOP"
 
         private const val TAG = "AYAX_ALARM"
         private const val CHANNEL_ID = "ayax_security_alarm"
@@ -39,6 +39,17 @@ class AlarmService : Service() {
         flags: Int,
         startId: Int
     ): Int {
+
+        /*
+         * Muhimmi:
+         * Duk lokacin da aka kira startForegroundService(),
+         * dole service ya kira startForeground() nan take.
+         */
+        startForeground(
+            NOTIFICATION_ID,
+            createNotification()
+        )
+
         when (intent?.action) {
             ACTION_STOP -> {
                 stopAlarmSound()
@@ -47,23 +58,28 @@ class AlarmService : Service() {
             }
 
             ACTION_START -> {
-                startForeground(
-                    NOTIFICATION_ID,
-                    createNotification()
-                )
-
                 if (mediaPlayer?.isPlaying != true) {
                     startAlarmSound()
                 }
             }
 
             else -> {
-                Log.d(TAG, "Ignoring service call without valid action")
+                /*
+                 * Wannan yana hana crash idan wani old code,
+                 * GeofenceManager ko LocationModule ya fara service
+                 * ba tare da action ba.
+                 */
+                Log.w(
+                    TAG,
+                    "AlarmService started without action; stopping safely"
+                )
+
+                stopAlarmSound()
+                stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
         }
 
-        // Kada Android ya sake tayar da alarm bayan an stop.
         return START_NOT_STICKY
     }
 
@@ -74,38 +90,78 @@ class AlarmService : Service() {
             val audioManager =
                 getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
-            audioManager.ringerMode = AudioManager.RINGER_MODE_NORMAL
+            try {
+                audioManager.ringerMode =
+                    AudioManager.RINGER_MODE_NORMAL
 
-            audioManager.setStreamVolume(
-                AudioManager.STREAM_ALARM,
-                audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM),
-                0
-            )
+                audioManager.setStreamVolume(
+                    AudioManager.STREAM_ALARM,
+                    audioManager.getStreamMaxVolume(
+                        AudioManager.STREAM_ALARM
+                    ),
+                    0
+                )
+            } catch (error: Exception) {
+                Log.w(
+                    TAG,
+                    "Could not change alarm volume",
+                    error
+                )
+            }
 
-            val attributes = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_ALARM)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .build()
+            val attributes =
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(
+                        AudioAttributes.CONTENT_TYPE_SONIFICATION
+                    )
+                    .build()
 
-            mediaPlayer = MediaPlayer.create(
-                this,
+            val player = MediaPlayer.create(
+                applicationContext,
                 R.raw.alarm,
                 attributes,
                 0
             )
 
-            if (mediaPlayer == null) {
+            if (player == null) {
+                Log.w(
+                    TAG,
+                    "Raw alarm sound unavailable; using default alarm"
+                )
+
                 startDefaultAlarm()
                 return
             }
 
-            mediaPlayer?.apply {
+            player.apply {
                 isLooping = true
                 setVolume(1f, 1f)
+
+                setOnErrorListener { mp, what, extra ->
+                    Log.e(
+                        TAG,
+                        "MediaPlayer error: what=$what extra=$extra"
+                    )
+
+                    try {
+                        mp.release()
+                    } catch (_: Exception) {
+                    }
+
+                    mediaPlayer = null
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+
+                    true
+                }
+
                 start()
             }
 
-            Log.d(TAG, "Alarm started")
+            mediaPlayer = player
+            Log.d(TAG, "Alarm started successfully")
+
         } catch (error: Exception) {
             Log.e(TAG, "Raw alarm failed", error)
             startDefaultAlarm()
@@ -115,46 +171,66 @@ class AlarmService : Service() {
     private fun startDefaultAlarm() {
         try {
             val alarmUri =
-                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                    ?: RingtoneManager.getDefaultUri(
-                        RingtoneManager.TYPE_RINGTONE
-                    )
+                RingtoneManager.getDefaultUri(
+                    RingtoneManager.TYPE_ALARM
+                ) ?: RingtoneManager.getDefaultUri(
+                    RingtoneManager.TYPE_RINGTONE
+                )
 
             if (alarmUri == null) {
-                Log.e(TAG, "No alarm sound is available")
+                Log.e(TAG, "No alarm sound available")
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
                 return
             }
 
-            mediaPlayer = MediaPlayer().apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ALARM)
-                        .setContentType(
-                            AudioAttributes.CONTENT_TYPE_SONIFICATION
-                        )
-                        .build()
-                )
+            val player =
+                MediaPlayer().apply {
+                    setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(
+                                AudioAttributes.USAGE_ALARM
+                            )
+                            .setContentType(
+                                AudioAttributes.CONTENT_TYPE_SONIFICATION
+                            )
+                            .build()
+                    )
 
-                setDataSource(applicationContext, alarmUri)
-                isLooping = true
-                setVolume(1f, 1f)
-                prepare()
-                start()
-            }
+                    setDataSource(
+                        applicationContext,
+                        alarmUri
+                    )
+
+                    isLooping = true
+                    setVolume(1f, 1f)
+                    prepare()
+                    start()
+                }
+
+            mediaPlayer = player
+            Log.d(TAG, "Default alarm started")
+
         } catch (error: Exception) {
             Log.e(TAG, "Default alarm failed", error)
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
         }
     }
 
     private fun stopAlarmSound() {
+        val player = mediaPlayer ?: return
+
         try {
-            mediaPlayer?.stop()
+            if (player.isPlaying) {
+                player.stop()
+            }
         } catch (_: Exception) {
         }
 
         try {
-            mediaPlayer?.reset()
-            mediaPlayer?.release()
+            player.reset()
+            player.release()
         } catch (_: Exception) {
         }
 
@@ -164,26 +240,34 @@ class AlarmService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Ayax Security Alarm",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Remote gateway security alarm"
-                setSound(null, null)
-            }
+            val channel =
+                NotificationChannel(
+                    CHANNEL_ID,
+                    "Ayax Security Alarm",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description =
+                        "Remote gateway security alarm"
+
+                    setSound(null, null)
+                }
 
             val manager =
-                getSystemService(NotificationManager::class.java)
+                getSystemService(
+                    NotificationManager::class.java
+                )
 
             manager.createNotificationChannel(channel)
         }
     }
 
     private fun createNotification(): Notification {
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(
+            this,
+            CHANNEL_ID
+        )
             .setContentTitle("Ayax Security Alarm")
-            .setContentText("Remote alarm is active")
+            .setContentText("Remote alarm service is active")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
@@ -194,6 +278,7 @@ class AlarmService : Service() {
 
     override fun onDestroy() {
         stopAlarmSound()
+        stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
     }
 

@@ -46,7 +46,6 @@ object GeofenceManager {
                     AlarmService::class.java
                 )
 
-            context.startForegroundService(intent)
 
         }
 
