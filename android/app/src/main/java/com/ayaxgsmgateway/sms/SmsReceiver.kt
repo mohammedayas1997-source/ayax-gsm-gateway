@@ -80,11 +80,7 @@ class SmsReceiver : BroadcastReceiver() {
                 return
             }
 
-            val subscriptionId = resolveSubscriptionId(
-                intent,
-                smsMessages.firstOrNull()?.subscriptionId
-                    ?: SubscriptionManager.INVALID_SUBSCRIPTION_ID
-            )
+            val subscriptionId = resolveSubscriptionId(intent)
 
             val slotIndex = resolveSlotIndex(
                 context,
@@ -115,23 +111,14 @@ class SmsReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun resolveSubscriptionId(
-        intent: Intent,
-        messageSubscriptionId: Int
-    ): Int {
-        if (
-            messageSubscriptionId !=
-            SubscriptionManager.INVALID_SUBSCRIPTION_ID
-        ) {
-            return messageSubscriptionId
-        }
-
+    private fun resolveSubscriptionId(intent: Intent): Int {
         val keys = listOf(
             "subscription",
             "subscription_id",
             "subscriptionId",
             "sub_id",
-            "subId"
+            "subId",
+            "android.telephony.extra.SUBSCRIPTION_INDEX"
         )
 
         for (key in keys) {
