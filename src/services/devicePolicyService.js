@@ -2,26 +2,30 @@ import { NativeModules } from "react-native";
 
 const { DevicePolicyModule } = NativeModules;
 
-export const isAdminEnabled = async () => {
+const requireModule = () => {
   if (!DevicePolicyModule) {
     throw new Error("DevicePolicyModule not linked");
   }
 
-  return DevicePolicyModule.isAdminEnabled();
+  return DevicePolicyModule;
+};
+
+export const isAdminEnabled = async () => {
+  return requireModule().isAdminEnabled();
 };
 
 export const isDeviceOwner = async () => {
-  if (!DevicePolicyModule) {
-    throw new Error("DevicePolicyModule not linked");
-  }
+  return requireModule().isDeviceOwner();
+};
 
-  return DevicePolicyModule.isDeviceOwner();
+export const applyOwnerPolicies = async () => {
+  return requireModule().applyOwnerPolicies();
 };
 
 export const lockDevice = async () => {
-  if (!DevicePolicyModule) {
-    throw new Error("DevicePolicyModule not linked");
-  }
+  return requireModule().lockDevice();
+};
 
-  return DevicePolicyModule.lockDevice();
+export const allowAppRemoval = async () => {
+  return requireModule().allowAppRemoval();
 };
