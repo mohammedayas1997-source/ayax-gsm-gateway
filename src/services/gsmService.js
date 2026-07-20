@@ -49,6 +49,7 @@ export const syncSimInfo = async () => {
   }
 
   const simInfo = await getSimInfo();
+
   const sims = Array.isArray(simInfo?.sims)
     ? simInfo.sims
     : [];
@@ -57,30 +58,49 @@ export const syncSimInfo = async () => {
     throw new Error("No active SIM cards found");
   }
 
-  const payload = {
-    deviceId,
-    secretKey,
-    sims: sims.map((sim) => ({
-      slotIndex: Number(sim.slotIndex),
-      subscriptionId: Number(sim.subscriptionId),
-      carrierName: sim.carrierName || "Unknown",
-      displayName: sim.displayName || "Unknown",
-      phoneNumber: sim.number || "",
-      countryIso: sim.countryIso || "",
-      mcc:
-        sim.mcc === null || sim.mcc === undefined
-          ? null
-          : Number(sim.mcc),
-      mnc:
-        sim.mnc === null || sim.mnc === undefined
-          ? null
-          : Number(sim.mnc),
-    })),
-  };
-
   const response = await api.post(
     "/gateway/sims/sync",
-    payload
+    {
+      deviceId,
+      secretKey,
+      sims: sims.map((sim) => ({
+        slotIndex: Number(sim.slotIndex),
+        subscriptionId: Number(sim.subscriptionId),
+
+        carrierName:
+          sim.carrierName || "Unknown",
+
+        displayName:
+          sim.displayName ||
+          sim.carrierName ||
+          "Unknown",
+
+        phoneNumber:
+          sim.number ||
+          sim.phoneNumber ||
+          "",
+
+        number:
+          sim.number ||
+          sim.phoneNumber ||
+          "",
+
+        countryIso:
+          sim.countryIso || "",
+
+        mcc:
+          sim.mcc === null ||
+          sim.mcc === undefined
+            ? null
+            : Number(sim.mcc),
+
+        mnc:
+          sim.mnc === null ||
+          sim.mnc === undefined
+            ? null
+            : Number(sim.mnc),
+      })),
+    }
   );
 
   return {
