@@ -23,8 +23,11 @@ class SmsReceiver : BroadcastReceiver() {
     companion object {
         private const val TAG = "AYAX_SMS"
 
-        private const val BACKEND_URL =
+        private const val INCOMING_SMS_URL =
             "https://ayax-api-marketplace.onrender.com/api/v1/gateway/incoming-sms"
+
+        private const val COMMAND_RESULT_URL =
+            "https://ayax-api-marketplace.onrender.com/api/v1/gateway/result"
     }
 
     private val client = OkHttpClient.Builder()
@@ -43,13 +46,13 @@ class SmsReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
 
         try {
-            val prefs = context.getSharedPreferences(
+            val devicePrefs = context.getSharedPreferences(
                 "AYAX_DEVICE",
                 Context.MODE_PRIVATE
             )
 
-            val deviceId = prefs.getString("deviceId", null)
-            val secretKey = prefs.getString("secretKey", null)
+            val deviceId = devicePrefs.getString("deviceId", null)
+            val secretKey = devicePrefs.getString("secretKey", null)
 
             if (deviceId.isNullOrBlank() || secretKey.isNullOrBlank()) {
                 Log.e(TAG, "Device credentials not found")
@@ -81,11 +84,7 @@ class SmsReceiver : BroadcastReceiver() {
             }
 
             val subscriptionId = resolveSubscriptionId(intent)
-
-            val slotIndex = resolveSlotIndex(
-                context,
-                subscriptionId
-            )
+            val slotIndex = resolveSlotIndex(context, subscriptionId)
 
             Log.d(
                 TAG,
@@ -93,6 +92,45 @@ class SmsReceiver : BroadcastReceiver() {
                     "subscriptionId=$subscriptionId, " +
                     "slotIndex=$slotIndex, message=$fullMessage"
             )
+
+            val ussdPrefs = context.getSharedPreferences(
+                "AYAX_USSD",
+                Context.MODE_PRIVATE
+            )
+
+            val pendingReference =
+                ussdPrefs.getString("reference", null)
+
+            if (
+                !pendingReference.isNullOrBlank() &&
+                isDataBalanceSms(fullMessage)
+            ) {
+                sendBalanceCommandResult(
+                    deviceId = deviceId,
+                    secretKey = secretKey,
+                    reference = pendingReference,
+                    message = fullMessage,
+                    onComplete = {
+                        ussdPrefs.edit()
+                            .remove("reference")
+                            .apply()
+
+                        sendSmsToBackend(
+                            deviceId = deviceId,
+                            secretKey = secretKey,
+                            phoneNumber = sender,
+                            message = fullMessage,
+                            subscriptionId = subscriptionId,
+                            slotIndex = slotIndex,
+                            onComplete = {
+                                pendingResult.finish()
+                            }
+                        )
+                    }
+                )
+
+                return
+            }
 
             sendSmsToBackend(
                 deviceId = deviceId,
@@ -109,6 +147,20 @@ class SmsReceiver : BroadcastReceiver() {
             Log.e(TAG, "SMS receiver failed", error)
             pendingResult.finish()
         }
+    }
+
+    private fun isDataBalanceSms(message: String): Boolean {
+        val text = message.lowercase()
+
+        return text.contains("data balance") ||
+            text.contains("your balances") ||
+            text.contains("bundle") ||
+            text.contains("remaining data") ||
+            text.contains("remaining balance") ||
+            text.contains("mb") ||
+            text.contains("gb") ||
+            text.contains("kb") ||
+            text.contains("tb")
     }
 
     private fun resolveSubscriptionId(intent: Intent): Int {
@@ -160,9 +212,7 @@ class SmsReceiver : BroadcastReceiver() {
                     Build.VERSION.SDK_INT >=
                     Build.VERSION_CODES.LOLLIPOP_MR1
                 ) {
-                    manager.getActiveSubscriptionInfo(
-                        subscriptionId
-                    )
+                    manager.getActiveSubscriptionInfo(subscriptionId)
                 } else {
                     null
                 }
@@ -177,6 +227,77 @@ class SmsReceiver : BroadcastReceiver() {
 
             0
         }
+    }
+
+    private fun sendBalanceCommandResult(
+        deviceId: String,
+        secretKey: String,
+        reference: String,
+        message: String,
+        onComplete: () -> Unit
+    ) {
+        val json = JSONObject().apply {
+            put("deviceId", deviceId)
+            put("secretKey", secretKey)
+            put("reference", reference)
+            put("status", "SUCCESSFUL")
+            put("message", message)
+        }
+
+        val body = json
+            .toString()
+            .toRequestBody(
+                "application/json; charset=utf-8".toMediaType()
+            )
+
+        val request = Request.Builder()
+            .url(COMMAND_RESULT_URL)
+            .post(body)
+            .build()
+
+        client.newCall(request).enqueue(
+            object : Callback {
+
+                override fun onFailure(
+                    call: Call,
+                    error: IOException
+                ) {
+                    Log.e(
+                        TAG,
+                        "Data balance result failed: ${error.message}",
+                        error
+                    )
+
+                    onComplete()
+                }
+
+                override fun onResponse(
+                    call: Call,
+                    response: Response
+                ) {
+                    response.use {
+                        val responseBody =
+                            it.body?.string().orEmpty()
+
+                        if (it.isSuccessful) {
+                            Log.d(
+                                TAG,
+                                "Data balance result sent: " +
+                                    "${it.code} $responseBody"
+                            )
+                        } else {
+                            Log.e(
+                                TAG,
+                                "Data balance result rejected: " +
+                                    "${it.code} $responseBody"
+                            )
+                        }
+                    }
+
+                    onComplete()
+                }
+            }
+        )
     }
 
     private fun sendSmsToBackend(
@@ -205,7 +326,7 @@ class SmsReceiver : BroadcastReceiver() {
             )
 
         val request = Request.Builder()
-            .url(BACKEND_URL)
+            .url(INCOMING_SMS_URL)
             .post(body)
             .build()
 
