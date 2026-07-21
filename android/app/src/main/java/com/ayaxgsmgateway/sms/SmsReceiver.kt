@@ -23,11 +23,18 @@ class SmsReceiver : BroadcastReceiver() {
     companion object {
         private const val TAG = "AYAX_SMS"
 
+        private const val DEVICE_PREFS = "AYAX_DEVICE"
+        private const val USSD_PREFS = "AYAX_USSD"
+
         private const val INCOMING_SMS_URL =
             "https://ayax-api-marketplace.onrender.com/api/v1/gateway/incoming-sms"
 
         private const val COMMAND_RESULT_URL =
             "https://ayax-api-marketplace.onrender.com/api/v1/gateway/result"
+
+        // Kada tsohon pending USSD ya kama SMS bayan dogon lokaci.
+        private const val PENDING_REQUEST_TIMEOUT_MS =
+            5 * 60 * 1000L
     }
 
     private val client = OkHttpClient.Builder()
@@ -36,144 +43,296 @@ class SmsReceiver : BroadcastReceiver() {
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    override fun onReceive(context: Context?, intent: Intent?) {
+    override fun onReceive(
+        context: Context?,
+        intent: Intent?
+    ) {
         if (context == null || intent == null) return
 
-        if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) {
+        if (
+            intent.action !=
+            Telephony.Sms.Intents.SMS_RECEIVED_ACTION
+        ) {
             return
         }
 
         val pendingResult = goAsync()
 
         try {
-            val devicePrefs = context.getSharedPreferences(
-                "AYAX_DEVICE",
-                Context.MODE_PRIVATE
-            )
+            val devicePrefs =
+                context.getSharedPreferences(
+                    DEVICE_PREFS,
+                    Context.MODE_PRIVATE
+                )
 
-            val deviceId = devicePrefs.getString("deviceId", null)
-            val secretKey = devicePrefs.getString("secretKey", null)
+            val deviceId =
+                devicePrefs.getString("deviceId", null)
 
-            if (deviceId.isNullOrBlank() || secretKey.isNullOrBlank()) {
+            val secretKey =
+                devicePrefs.getString("secretKey", null)
+
+            if (
+                deviceId.isNullOrBlank() ||
+                secretKey.isNullOrBlank()
+            ) {
                 Log.e(TAG, "Device credentials not found")
                 pendingResult.finish()
                 return
             }
 
-            val smsMessages =
-                Telephony.Sms.Intents.getMessagesFromIntent(intent)
+            val messages =
+                Telephony.Sms.Intents
+                    .getMessagesFromIntent(intent)
 
-            if (smsMessages.isNullOrEmpty()) {
+            if (messages.isNullOrEmpty()) {
                 Log.e(TAG, "No SMS messages found")
                 pendingResult.finish()
                 return
             }
 
             val sender =
-                smsMessages.firstOrNull()?.originatingAddress
-                    ?: "Unknown"
+                messages.firstOrNull()
+                    ?.originatingAddress
+                    ?.trim()
+                    .orEmpty()
+                    .ifBlank { "Unknown" }
 
-            val fullMessage = smsMessages
-                .mapNotNull { it.messageBody }
-                .joinToString(separator = "")
+            val fullMessage =
+                messages
+                    .mapNotNull { it.messageBody }
+                    .joinToString("")
+                    .trim()
 
             if (fullMessage.isBlank()) {
-                Log.e(TAG, "SMS message body is empty")
+                Log.e(TAG, "SMS body is empty")
                 pendingResult.finish()
                 return
             }
 
-            val subscriptionId = resolveSubscriptionId(intent)
-            val slotIndex = resolveSlotIndex(context, subscriptionId)
+            val subscriptionId =
+                resolveSubscriptionId(intent)
+
+            val slotIndex =
+                resolveSlotIndex(
+                    context,
+                    subscriptionId
+                )
 
             Log.d(
                 TAG,
-                "SMS received. sender=$sender, " +
+                "SMS received: sender=$sender, " +
                     "subscriptionId=$subscriptionId, " +
-                    "slotIndex=$slotIndex, message=$fullMessage"
+                    "slotIndex=$slotIndex, " +
+                    "message=$fullMessage"
             )
 
-            val ussdPrefs = context.getSharedPreferences(
-                "AYAX_USSD",
-                Context.MODE_PRIVATE
-            )
+            val ussdPrefs =
+                context.getSharedPreferences(
+                    USSD_PREFS,
+                    Context.MODE_PRIVATE
+                )
 
-            val pendingReference =
-                ussdPrefs.getString("reference", null)
+            val reference =
+                ussdPrefs.getString(
+                    "reference",
+                    null
+                )
 
-            if (
-                !pendingReference.isNullOrBlank() &&
-                isDataBalanceSms(fullMessage)
-            ) {
+            val requestType =
+                ussdPrefs.getString(
+                    "requestType",
+                    "USSD"
+                ) ?: "USSD"
+
+            val requestedSlot =
+                ussdPrefs.getInt(
+                    "simSlot",
+                    -1
+                )
+
+            val waitingForSms =
+                ussdPrefs.getBoolean(
+                    "waitingForSms",
+                    false
+                )
+
+            val requestedAt =
+                ussdPrefs.getLong(
+                    "requestedAt",
+                    ussdPrefs.getLong(
+                        "waitingSince",
+                        0L
+                    )
+                )
+
+            val requestStillValid =
+                requestedAt > 0L &&
+                    System.currentTimeMillis() -
+                    requestedAt <=
+                    PENDING_REQUEST_TIMEOUT_MS
+
+            val slotMatches =
+                requestedSlot < 0 ||
+                    slotIndex < 0 ||
+                    requestedSlot == slotIndex
+
+            val isExpectedBalanceSms =
+                !reference.isNullOrBlank() &&
+                    requestStillValid &&
+                    slotMatches &&
+                    isBalanceSms(
+                        message = fullMessage,
+                        requestType = requestType
+                    )
+
+            if (isExpectedBalanceSms) {
+                Log.d(
+                    TAG,
+                    "Balance SMS matched pending command. " +
+                        "reference=$reference, " +
+                        "requestType=$requestType, " +
+                        "requestedSlot=$requestedSlot, " +
+                        "receivedSlot=$slotIndex, " +
+                        "waitingForSms=$waitingForSms"
+                )
+
                 sendBalanceCommandResult(
                     deviceId = deviceId,
                     secretKey = secretKey,
-                    reference = pendingReference,
+                    reference = reference!!,
                     message = fullMessage,
-                    onComplete = {
-                        ussdPrefs.edit()
-                            .remove("reference")
-                            .apply()
+                    slotIndex = slotIndex,
+                    requestType = requestType
+                ) { resultSent ->
 
-                        sendSmsToBackend(
-                            deviceId = deviceId,
-                            secretKey = secretKey,
-                            phoneNumber = sender,
-                            message = fullMessage,
-                            subscriptionId = subscriptionId,
-                            slotIndex = slotIndex,
-                            onComplete = {
-                                pendingResult.finish()
-                            }
+                    if (resultSent) {
+                        clearPendingUssdRequest(
+                            ussdPrefs
                         )
                     }
-                )
+
+                    // Ko balance callback ya yi nasara ko ya gaza,
+                    // har yanzu mu adana SMS ɗin a inbox.
+                    sendSmsToBackend(
+                        deviceId = deviceId,
+                        secretKey = secretKey,
+                        phoneNumber = sender,
+                        message = fullMessage,
+                        subscriptionId = subscriptionId,
+                        slotIndex = slotIndex
+                    ) {
+                        pendingResult.finish()
+                    }
+                }
 
                 return
             }
 
+            // Normal incoming SMS.
             sendSmsToBackend(
                 deviceId = deviceId,
                 secretKey = secretKey,
                 phoneNumber = sender,
                 message = fullMessage,
                 subscriptionId = subscriptionId,
-                slotIndex = slotIndex,
-                onComplete = {
-                    pendingResult.finish()
-                }
-            )
+                slotIndex = slotIndex
+            ) {
+                pendingResult.finish()
+            }
+
         } catch (error: Exception) {
-            Log.e(TAG, "SMS receiver failed", error)
+            Log.e(
+                TAG,
+                "SMS receiver failed",
+                error
+            )
+
             pendingResult.finish()
         }
     }
 
-    private fun isDataBalanceSms(message: String): Boolean {
-    val text = message.lowercase()
+    private fun isBalanceSms(
+        message: String,
+        requestType: String
+    ): Boolean {
+        val text =
+            message
+                .lowercase()
+                .replace(Regex("\\s+"), " ")
+                .trim()
 
-    val keywords = listOf(
-        "data",
-        "bundle",
-        "bundles",
-        "data balance",
-        "remaining data",
-        "remaining balance",
-        "balance",
-        "available balance",
-        "available data",
-        "airtime balance",
-        "credit balance",
-        "mb",
-        "gb",
-        "kb",
-        "tb"
-    )
+        val hasDataUnit =
+            Regex(
+                """\b\d+(?:\.\d+)?\s*(kb|mb|gb|tb)\b""",
+                RegexOption.IGNORE_CASE
+            ).containsMatchIn(text)
 
-    return keywords.any { text.contains(it) }
-}
+        val hasMoney =
+            Regex(
+                """(?:₦|ngn|n)\s*\d+(?:[,.]\d+)?""",
+                RegexOption.IGNORE_CASE
+            ).containsMatchIn(text)
 
-    private fun resolveSubscriptionId(intent: Intent): Int {
+        val dataKeywords = listOf(
+            "data balance",
+            "bundle balance",
+            "remaining data",
+            "available data",
+            "data bundle",
+            "binge bundle",
+            "youtube night",
+            "night bundle",
+            "social bundle",
+            "bonus data",
+            "main data",
+            "data:",
+            "bundle:"
+        )
+
+        val airtimeKeywords = listOf(
+            "airtime balance",
+            "account balance",
+            "main balance",
+            "credit balance",
+            "available balance",
+            "your balance is",
+            "balance:"
+        )
+
+        val normalizedType =
+            requestType.uppercase()
+
+        return when (normalizedType) {
+            "DATA" -> {
+                hasDataUnit ||
+                    dataKeywords.any {
+                        text.contains(it)
+                    }
+            }
+
+            "AIRTIME" -> {
+                hasMoney ||
+                    airtimeKeywords.any {
+                        text.contains(it)
+                    }
+            }
+
+            else -> {
+                hasDataUnit ||
+                    hasMoney ||
+                    dataKeywords.any {
+                        text.contains(it)
+                    } ||
+                    airtimeKeywords.any {
+                        text.contains(it)
+                    }
+            }
+        }
+    }
+
+    private fun resolveSubscriptionId(
+        intent: Intent
+    ): Int {
         val keys = listOf(
             "subscription",
             "subscription_id",
@@ -184,20 +343,24 @@ class SmsReceiver : BroadcastReceiver() {
         )
 
         for (key in keys) {
-            val value = intent.getIntExtra(
-                key,
-                SubscriptionManager.INVALID_SUBSCRIPTION_ID
-            )
+            val value =
+                intent.getIntExtra(
+                    key,
+                    SubscriptionManager
+                        .INVALID_SUBSCRIPTION_ID
+                )
 
             if (
                 value !=
-                SubscriptionManager.INVALID_SUBSCRIPTION_ID
+                SubscriptionManager
+                    .INVALID_SUBSCRIPTION_ID
             ) {
                 return value
             }
         }
 
-        return SubscriptionManager.INVALID_SUBSCRIPTION_ID
+        return SubscriptionManager
+            .INVALID_SUBSCRIPTION_ID
     }
 
     private fun resolveSlotIndex(
@@ -206,28 +369,35 @@ class SmsReceiver : BroadcastReceiver() {
     ): Int {
         if (
             subscriptionId ==
-            SubscriptionManager.INVALID_SUBSCRIPTION_ID
+            SubscriptionManager
+                .INVALID_SUBSCRIPTION_ID
         ) {
-            return 0
+            return -1
         }
 
         return try {
             val manager =
                 context.getSystemService(
-                    Context.TELEPHONY_SUBSCRIPTION_SERVICE
+                    Context
+                        .TELEPHONY_SUBSCRIPTION_SERVICE
                 ) as SubscriptionManager
 
             val info =
                 if (
                     Build.VERSION.SDK_INT >=
-                    Build.VERSION_CODES.LOLLIPOP_MR1
+                    Build.VERSION_CODES
+                        .LOLLIPOP_MR1
                 ) {
-                    manager.getActiveSubscriptionInfo(subscriptionId)
+                    manager
+                        .getActiveSubscriptionInfo(
+                            subscriptionId
+                        )
                 } else {
                     null
                 }
 
-            info?.simSlotIndex ?: 0
+            info?.simSlotIndex ?: -1
+
         } catch (error: Exception) {
             Log.e(
                 TAG,
@@ -235,7 +405,7 @@ class SmsReceiver : BroadcastReceiver() {
                 error
             )
 
-            0
+            -1
         }
     }
 
@@ -244,7 +414,9 @@ class SmsReceiver : BroadcastReceiver() {
         secretKey: String,
         reference: String,
         message: String,
-        onComplete: () -> Unit
+        slotIndex: Int,
+        requestType: String,
+        onComplete: (Boolean) -> Unit
     ) {
         val json = JSONObject().apply {
             put("deviceId", deviceId)
@@ -252,18 +424,26 @@ class SmsReceiver : BroadcastReceiver() {
             put("reference", reference)
             put("status", "SUCCESSFUL")
             put("message", message)
+            put("response", message)
+            put("simSlot", slotIndex)
+            put("requestType", requestType)
         }
 
-        val body = json
-            .toString()
-            .toRequestBody(
-                "application/json; charset=utf-8".toMediaType()
-            )
+        val body =
+            json.toString()
+                .toRequestBody(
+                    "application/json; charset=utf-8"
+                        .toMediaType()
+                )
 
         Log.d(
-    TAG,
-    "Sending result -> ref=$reference message=$message"
-)
+            TAG,
+            "Sending balance result: " +
+                "reference=$reference, " +
+                "slotIndex=$slotIndex, " +
+                "requestType=$requestType, " +
+                "message=$message"
+        )
 
         val request = Request.Builder()
             .url(COMMAND_RESULT_URL)
@@ -279,11 +459,12 @@ class SmsReceiver : BroadcastReceiver() {
                 ) {
                     Log.e(
                         TAG,
-                        "Data balance result failed: ${error.message}",
+                        "Balance result failed: " +
+                            "${error.message}",
                         error
                     )
 
-                    onComplete()
+                    onComplete(false)
                 }
 
                 override fun onResponse(
@@ -292,29 +473,31 @@ class SmsReceiver : BroadcastReceiver() {
                 ) {
                     response.use {
                         val responseBody =
-                            it.body?.string().orEmpty()
+                            it.body
+                                ?.string()
+                                .orEmpty()
 
                         if (it.isSuccessful) {
                             Log.d(
                                 TAG,
-                                "Data balance result sent: " +
-                                    "${it.code} $responseBody"
+                                "Balance result sent: " +
+                                    "${it.code} " +
+                                    responseBody
                             )
+
+                            onComplete(true)
                         } else {
                             Log.e(
                                 TAG,
-                                "Data balance result rejected: " +
-                                    "${it.code} $responseBody"
+                                "Balance result rejected: " +
+                                    "${it.code} " +
+                                    responseBody
                             )
 
-                        Log.d(
-                            TAG,
-                            "Backend response: ${it.code} ${responseBody}"
-                        )
+                            // Kada a goge reference idan backend ya ƙi.
+                            onComplete(false)
                         }
                     }
-
-                    onComplete()
                 }
             }
         )
@@ -336,14 +519,18 @@ class SmsReceiver : BroadcastReceiver() {
             put("message", message)
             put("subscriptionId", subscriptionId)
             put("slotIndex", slotIndex)
-            put("receivedAt", System.currentTimeMillis())
+            put(
+                "receivedAt",
+                System.currentTimeMillis()
+            )
         }
 
-        val body = json
-            .toString()
-            .toRequestBody(
-                "application/json; charset=utf-8".toMediaType()
-            )
+        val body =
+            json.toString()
+                .toRequestBody(
+                    "application/json; charset=utf-8"
+                        .toMediaType()
+                )
 
         val request = Request.Builder()
             .url(INCOMING_SMS_URL)
@@ -359,7 +546,8 @@ class SmsReceiver : BroadcastReceiver() {
                 ) {
                     Log.e(
                         TAG,
-                        "SMS sync failed: ${error.message}",
+                        "SMS sync failed: " +
+                            "${error.message}",
                         error
                     )
 
@@ -372,19 +560,23 @@ class SmsReceiver : BroadcastReceiver() {
                 ) {
                     response.use {
                         val responseBody =
-                            it.body?.string().orEmpty()
+                            it.body
+                                ?.string()
+                                .orEmpty()
 
                         if (it.isSuccessful) {
                             Log.d(
                                 TAG,
-                                "SMS synced successfully: " +
-                                    "${it.code} $responseBody"
+                                "SMS synced: " +
+                                    "${it.code} " +
+                                    responseBody
                             )
                         } else {
                             Log.e(
                                 TAG,
                                 "SMS sync rejected: " +
-                                    "${it.code} $responseBody"
+                                    "${it.code} " +
+                                    responseBody
                             )
                         }
                     }
@@ -392,6 +584,26 @@ class SmsReceiver : BroadcastReceiver() {
                     onComplete()
                 }
             }
+        )
+    }
+
+    private fun clearPendingUssdRequest(
+        prefs: android.content.SharedPreferences
+    ) {
+        prefs.edit()
+            .remove("reference")
+            .remove("simSlot")
+            .remove("subscriptionId")
+            .remove("requestType")
+            .remove("ussdCode")
+            .remove("waitingForSms")
+            .remove("waitingSince")
+            .remove("requestedAt")
+            .apply()
+
+        Log.d(
+            TAG,
+            "Pending USSD request cleared"
         )
     }
 }
