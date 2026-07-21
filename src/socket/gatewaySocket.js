@@ -14,7 +14,8 @@ import {
 } from "../services/deviceManagerService";
 import { lockDevice } from "../services/devicePolicyService";
 
-const SOCKET_URL = "https://ayax-api-marketplace.onrender.com";
+const SOCKET_URL =
+  "https://ayax-api-marketplace.onrender.com";
 
 let socket = null;
 
@@ -32,7 +33,10 @@ const saveLog = ({
       message,
     });
   } catch (error) {
-    console.log("Unable to save local log:", error?.message);
+    console.log(
+      "Unable to save local log:",
+      error?.message
+    );
   }
 };
 
@@ -162,6 +166,19 @@ const handleSmsCommand = async (command) => {
   });
 };
 
+const isWaitingForSmsResponse = (message = "") => {
+  const text = String(message).toLowerCase();
+
+  return (
+    text.includes("you will receive an sms") ||
+    text.includes("receive an sms") ||
+    text.includes("sent to you via sms") ||
+    text.includes("details shortly") ||
+    text.includes("balance details shortly") ||
+    text.includes("request is being processed")
+  );
+};
+
 const handleUssdCommand = async (command) => {
   const payload = command.payload || {};
 
@@ -200,9 +217,42 @@ const handleUssdCommand = async (command) => {
   ).trim();
 
   if (!ussdResponse) {
-    throw new Error(
-      "Empty USSD response received from Android"
-    );
+    await reportResult({
+      reference: command.reference,
+      status: "PROCESSING",
+      message:
+        "USSD request completed. Waiting for network response.",
+      simSlot,
+    });
+
+    saveLog({
+      type: "USSD",
+      reference: command.reference,
+      status: "PROCESSING",
+      message:
+        "Waiting for USSD or network SMS response",
+    });
+
+    return;
+  }
+
+  if (isWaitingForSmsResponse(ussdResponse)) {
+    await reportResult({
+      reference: command.reference,
+      status: "PROCESSING",
+      message: ussdResponse,
+      response: ussdResponse,
+      simSlot,
+    });
+
+    saveLog({
+      type: "USSD",
+      reference: command.reference,
+      status: "PROCESSING",
+      message: ussdResponse,
+    });
+
+    return;
   }
 
   await reportResult({
@@ -271,6 +321,9 @@ const handleCommand = async (command) => {
           reference: command.reference,
           status: "PROCESSING",
           message: "USSD command is being processed",
+          simSlot:
+            command.simSlot ??
+            command.payload?.simSlot,
         });
 
         await handleUssdCommand(command);
@@ -301,6 +354,9 @@ const handleCommand = async (command) => {
         reference: command.reference,
         status: "FAILED",
         message: errorMessage,
+        simSlot:
+          command.simSlot ??
+          command.payload?.simSlot,
       });
     } catch (reportError) {
       console.log(

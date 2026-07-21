@@ -150,18 +150,28 @@ class SmsReceiver : BroadcastReceiver() {
     }
 
     private fun isDataBalanceSms(message: String): Boolean {
-        val text = message.lowercase()
+    val text = message.lowercase()
 
-        return text.contains("data balance") ||
-            text.contains("your balances") ||
-            text.contains("bundle") ||
-            text.contains("remaining data") ||
-            text.contains("remaining balance") ||
-            text.contains("mb") ||
-            text.contains("gb") ||
-            text.contains("kb") ||
-            text.contains("tb")
-    }
+    val keywords = listOf(
+        "data",
+        "bundle",
+        "bundles",
+        "data balance",
+        "remaining data",
+        "remaining balance",
+        "balance",
+        "available balance",
+        "available data",
+        "airtime balance",
+        "credit balance",
+        "mb",
+        "gb",
+        "kb",
+        "tb"
+    )
+
+    return keywords.any { text.contains(it) }
+}
 
     private fun resolveSubscriptionId(intent: Intent): Int {
         val keys = listOf(
@@ -250,6 +260,11 @@ class SmsReceiver : BroadcastReceiver() {
                 "application/json; charset=utf-8".toMediaType()
             )
 
+        Log.d(
+    TAG,
+    "Sending result -> ref=$reference message=$message"
+)
+
         val request = Request.Builder()
             .url(COMMAND_RESULT_URL)
             .post(body)
@@ -291,6 +306,11 @@ class SmsReceiver : BroadcastReceiver() {
                                 "Data balance result rejected: " +
                                     "${it.code} $responseBody"
                             )
+
+                        Log.d(
+                            TAG,
+                            "Backend response: ${it.code} ${responseBody}"
+                        )
                         }
                     }
 
