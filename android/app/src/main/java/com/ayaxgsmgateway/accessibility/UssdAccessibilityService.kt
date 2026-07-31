@@ -25,6 +25,11 @@ class UssdAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
 
+        Log.d(
+    TAG,
+    "Event: ${event.eventType} Package=${event.packageName} Class=${event.className}"
+)
+
         if (
             event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
             event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
@@ -54,6 +59,10 @@ class UssdAccessibilityService : AccessibilityService() {
             eventText.isNotBlank() -> eventText
             else -> ""
         }
+
+        Log.d(TAG, "RootText = $rootText")
+        Log.d(TAG, "EventText = $eventText")
+        Log.d(TAG, "FinalMessage = $message")
 
         if (message.isBlank()) return
 
@@ -335,7 +344,7 @@ class UssdAccessibilityService : AccessibilityService() {
         private const val KEY_WAITING_SINCE = "waitingSince"
 
         private const val RESULT_URL =
-            "https://ayax-api-marketplace.onrender.com/api/v1/gateway/result"
+            "https://api.ayaxapis.com/api/v1/gateway/result"
 
         private const val DUPLICATE_WINDOW_MS = 2_500L
 

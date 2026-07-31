@@ -127,33 +127,33 @@ object UssdHelper {
                         onSuccess(message)
                     }
 
-                    override fun onReceiveUssdResponseFailed(
-                        telephonyManager: TelephonyManager?,
-                        request: String?,
-                        failureCode: Int
-                    ) {
-                        Log.w(
-                            TAG,
-                            "Native USSD failed with code: $failureCode"
-                        )
+override fun onReceiveUssdResponseFailed(
+    telephonyManager: TelephonyManager?,
+    request: String?,
+    failureCode: Int
+) {
+    Log.w(
+        TAG,
+        "Native USSD failed with code: $failureCode"
+    )
 
-                        if (failureCode == -1) {
-                            openDialerFallback(
-                                context = context,
-                                ussdCode = ussdCode,
-                                subscriptionId = subscriptionId,
-                                simSlot = simSlot,
-                                onSuccess = onSuccess,
-                                onError = onError
-                            )
-                            return
-                        }
+    if (failureCode == -1) {
+        openDialerFallback(
+            context = context,
+            ussdCode = ussdCode,
+            subscriptionId = subscriptionId,
+            simSlot = simSlot,
+            onSuccess = onSuccess,
+            onError = onError
+        )
 
-                        onError(
-                            "USSD failed with code: $failureCode"
-                        )
-                    }
-                },
+        return
+    }
+
+    onError(
+        "USSD failed with code: $failureCode"
+    )
+}
                 Handler(Looper.getMainLooper())
             )
         } catch (error: Exception) {
@@ -174,99 +174,103 @@ object UssdHelper {
         }
     }
 
-    private fun openDialerFallback(
-        context: Context,
-        ussdCode: String,
-        subscriptionId: Int,
-        simSlot: Int,
-        onSuccess: (String) -> Unit,
-        onError: (String) -> Unit
-    ) {
-        try {
-            savePendingMetadata(
-                context = context,
-                ussdCode = ussdCode,
-                simSlot = simSlot,
-                subscriptionId = subscriptionId
+private fun openDialerFallback(
+    context: Context,
+    ussdCode: String,
+    subscriptionId: Int,
+    simSlot: Int,
+    onSuccess: (String) -> Unit,
+    onError: (String) -> Unit
+) {
+    try {
+        savePendingMetadata(
+            context = context,
+            ussdCode = ussdCode,
+            simSlot = simSlot,
+            subscriptionId = subscriptionId
+        )
+
+        val encodedCode =
+            ussdCode.replace(
+                "#",
+                Uri.encode("#")
             )
 
-            val encodedCode =
-                ussdCode.replace(
-                    "#",
-                    Uri.encode("#")
-                )
+        val phoneAccountHandle =
+            findPhoneAccountHandle(
+                context,
+                subscriptionId,
+                simSlot
+            )
 
-            val phoneAccountHandle =
-                findPhoneAccountHandle(
-                    context,
-                    subscriptionId,
+        val intent =
+            Intent(
+                Intent.ACTION_CALL,
+                Uri.parse("tel:$encodedCode")
+            ).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+                putExtra(
+                    "com.android.phone.extra.slot",
                     simSlot
                 )
 
-            val intent =
-                Intent(
-                    Intent.ACTION_CALL,
-                    Uri.parse("tel:$encodedCode")
-                ).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                putExtra(
+                    "slot",
+                    simSlot
+                )
 
+                putExtra(
+                    "simSlot",
+                    simSlot
+                )
+
+                putExtra(
+                    "subscription",
+                    subscriptionId
+                )
+
+                putExtra(
+                    "subscription_id",
+                    subscriptionId
+                )
+
+                putExtra(
+                    "android.telephony.extra.SUBSCRIPTION_INDEX",
+                    subscriptionId
+                )
+
+                if (phoneAccountHandle != null) {
                     putExtra(
-                        "com.android.phone.extra.slot",
-                        simSlot
+                        TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE,
+                        phoneAccountHandle
                     )
-
-                    putExtra(
-                        "slot",
-                        simSlot
-                    )
-
-                    putExtra(
-                        "simSlot",
-                        simSlot
-                    )
-
-                    putExtra(
-                        "subscription",
-                        subscriptionId
-                    )
-
-                    putExtra(
-                        "subscription_id",
-                        subscriptionId
-                    )
-
-                    putExtra(
-                        "android.telephony.extra.SUBSCRIPTION_INDEX",
-                        subscriptionId
-                    )
-
-                    if (phoneAccountHandle != null) {
-                        putExtra(
-                            TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE,
-                            phoneAccountHandle
-                        )
-                    }
                 }
+            }
 
-            context.startActivity(intent)
+        context.startActivity(intent)
 
-            Log.d(
-                TAG,
-                "Dialer fallback started on SIM slot $simSlot, subscription $subscriptionId"
-            )
+        Log.d(
+            TAG,
+            "Dialer fallback started on SIM slot $simSlot, subscription $subscriptionId. Waiting for Accessibility Service."
+        )
 
-            onSuccess(
-                "USSD request opened on SIM ${simSlot + 1}; awaiting network response"
-            )
-        } catch (error: Exception) {
-            Log.e(TAG, "Dialer fallback failed", error)
+        /*
+         * Kada a kira onSuccess ko onError a nan.
+         *
+         * An buɗe dialer ne kawai.
+         * UssdAccessibilityService ce za ta kama
+         * ainihin sakon balance sannan ta tura SUCCESSFUL.
+         */
+    } catch (error: Exception) {
+        Log.e(TAG, "Dialer fallback failed", error)
 
-            onError(
-                error.message
-                    ?: "Unable to open USSD on selected SIM"
-            )
-        }
+        onError(
+            error.message
+                ?: "Unable to open USSD on selected SIM"
+        )
     }
+}
 
     private fun savePendingMetadata(
         context: Context,
