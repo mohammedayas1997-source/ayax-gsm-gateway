@@ -135,16 +135,25 @@ object UssdHelper {
                         )
 
                         if (failureCode == -1) {
-                            openDialerFallback(
-                                context = context,
-                                ussdCode = ussdCode,
-                                subscriptionId = subscriptionId,
-                                simSlot = simSlot,
-                                onSuccess = onSuccess,
-                                onError = onError
-                            )
-                            return
-                        }
+    Log.w(
+        TAG,
+        "Native callback returned -1. " +
+            "Request may still be processing; avoiding duplicate fallback call."
+    )
+
+    /*
+     * Kada a sake kiran *310# ta dialer,
+     * domin native request na iya riga ya shiga network.
+     *
+     * Accessibility Service ko SMS Receiver
+     * za su kama ainihin response.
+     */
+    onSuccess(
+        "USSD request submitted on SIM ${simSlot + 1}; awaiting network response"
+    )
+
+    return
+}
 
                         onError("USSD failed with code: $failureCode")
                     }
