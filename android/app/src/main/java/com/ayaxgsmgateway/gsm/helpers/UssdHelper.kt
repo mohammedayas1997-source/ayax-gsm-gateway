@@ -114,6 +114,7 @@ object UssdHelper {
                                 ussdCode = ussdCode,
                                 subscriptionId = subscriptionId,
                                 simSlot = simSlot,
+                                onSuccess = onSuccess,
                                 onError = onError
                             )
                             return
@@ -139,6 +140,7 @@ object UssdHelper {
                                 ussdCode = ussdCode,
                                 subscriptionId = subscriptionId,
                                 simSlot = simSlot,
+                                onSuccess = onSuccess,
                                 onError = onError
                             )
                             return
@@ -161,6 +163,7 @@ object UssdHelper {
                 ussdCode = ussdCode,
                 subscriptionId = subscriptionId,
                 simSlot = simSlot,
+                onSuccess = onSuccess,
                 onError = onError
             )
         }
@@ -171,6 +174,7 @@ object UssdHelper {
         ussdCode: String,
         subscriptionId: Int,
         simSlot: Int,
+        onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
         try {
@@ -205,22 +209,10 @@ object UssdHelper {
                         "com.android.phone.extra.slot",
                         simSlot
                     )
-                    putExtra(
-                        "slot",
-                        simSlot
-                    )
-                    putExtra(
-                        "simSlot",
-                        simSlot
-                    )
-                    putExtra(
-                        "subscription",
-                        subscriptionId
-                    )
-                    putExtra(
-                        "subscription_id",
-                        subscriptionId
-                    )
+                    putExtra("slot", simSlot)
+                    putExtra("simSlot", simSlot)
+                    putExtra("subscription", subscriptionId)
+                    putExtra("subscription_id", subscriptionId)
                     putExtra(
                         "android.telephony.extra.SUBSCRIPTION_INDEX",
                         subscriptionId
@@ -239,14 +231,12 @@ object UssdHelper {
             Log.d(
                 TAG,
                 "Dialer fallback started on SIM slot $simSlot, " +
-                    "subscription $subscriptionId. Waiting for Accessibility Service."
+                    "subscription $subscriptionId"
             )
 
-            /*
-             * Kada a kira onSuccess a nan.
-             * UssdAccessibilityService ce za ta kama ainihin sakon USSD
-             * sannan ta tura sakamakon zuwa backend.
-             */
+            onSuccess(
+                "USSD request opened on SIM ${simSlot + 1}; awaiting network response"
+            )
         } catch (error: Exception) {
             Log.e(TAG, "Dialer fallback failed", error)
 
@@ -255,94 +245,7 @@ object UssdHelper {
                     ?: "Unable to open USSD on selected SIM"
             )
         }
-   private fun openDialerFallback(
-    context: Context,
-    ussdCode: String,
-    subscriptionId: Int,
-    simSlot: Int,
-    onSuccess: (String) -> Unit,
-    onError: (String) -> Unit
-) {
-    try {
-        savePendingMetadata(
-            context = context,
-            ussdCode = ussdCode,
-            simSlot = simSlot,
-            subscriptionId = subscriptionId
-        )
-
-        val encodedCode =
-            ussdCode.replace(
-                "#",
-                Uri.encode("#")
-            )
-
-        val phoneAccountHandle =
-            findPhoneAccountHandle(
-                context,
-                subscriptionId,
-                simSlot
-            )
-
-        val intent =
-            Intent(
-                Intent.ACTION_CALL,
-                Uri.parse("tel:$encodedCode")
-            ).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-
-                putExtra(
-                    "com.android.phone.extra.slot",
-                    simSlot
-                )
-
-                putExtra("slot", simSlot)
-                putExtra("simSlot", simSlot)
-                putExtra("subscription", subscriptionId)
-                putExtra("subscription_id", subscriptionId)
-
-                putExtra(
-                    "android.telephony.extra.SUBSCRIPTION_INDEX",
-                    subscriptionId
-                )
-
-                if (phoneAccountHandle != null) {
-                    putExtra(
-                        TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE,
-                        phoneAccountHandle
-                    )
-                }
-            }
-
-        context.startActivity(intent)
-
-        Log.d(
-            TAG,
-            "Dialer fallback started on SIM slot $simSlot, " +
-                "subscription $subscriptionId"
-        )
-
-        /*
-         * Wannan zai sanar da command handler cewa
-         * an fara USSD. Accessibility Service za ta
-         * kama ainihin response daga baya.
-         */
-        onSuccess(
-            "USSD request opened on SIM ${simSlot + 1}; awaiting network response"
-        )
-    } catch (error: Exception) {
-        Log.e(
-            TAG,
-            "Dialer fallback failed",
-            error
-        )
-
-        onError(
-            error.message
-                ?: "Unable to open USSD on selected SIM"
-        )
     }
-} }
 
     private fun savePendingMetadata(
         context: Context,
