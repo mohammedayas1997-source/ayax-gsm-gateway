@@ -67,6 +67,7 @@ object UssdHelper {
                     ussdCode = ussdCode,
                     subscriptionId = subscriptionId,
                     simSlot = simSlot,
+                    onSuccess = onSuccess,
                     onError = onError
                 )
             }
@@ -108,16 +109,12 @@ object UssdHelper {
                                 .orEmpty()
 
                         if (message.isBlank()) {
-                            Log.w(
-                                TAG,
-                                "Native USSD returned an empty response. Opening dialer fallback."
-                            )
-
                             openDialerFallback(
                                 context = context,
                                 ussdCode = ussdCode,
                                 subscriptionId = subscriptionId,
                                 simSlot = simSlot,
+                                onSuccess = onSuccess,
                                 onError = onError
                             )
                             return
@@ -138,16 +135,12 @@ object UssdHelper {
                         )
 
                         if (failureCode == -1) {
-                            Log.w(
-                                TAG,
-                                "Native USSD returned -1. Opening dialer fallback and waiting for Accessibility Service."
-                            )
-
                             openDialerFallback(
                                 context = context,
                                 ussdCode = ussdCode,
                                 subscriptionId = subscriptionId,
                                 simSlot = simSlot,
+                                onSuccess = onSuccess,
                                 onError = onError
                             )
                             return
@@ -170,6 +163,7 @@ object UssdHelper {
                 ussdCode = ussdCode,
                 subscriptionId = subscriptionId,
                 simSlot = simSlot,
+                onSuccess = onSuccess,
                 onError = onError
             )
         }
@@ -180,6 +174,7 @@ object UssdHelper {
         ussdCode: String,
         subscriptionId: Int,
         simSlot: Int,
+        onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
         try {
@@ -235,14 +230,13 @@ object UssdHelper {
 
             Log.d(
                 TAG,
-                "Dialer fallback started on SIM slot $simSlot, subscription $subscriptionId. Waiting for Accessibility Service."
+                "Dialer fallback started on SIM slot $simSlot, " +
+                    "subscription $subscriptionId"
             )
 
-            /*
-             * Kada a kira onSuccess a nan.
-             * Accessibility Service ce za ta kama ainihin
-             * sakon USSD sannan ta aika SUCCESSFUL zuwa backend.
-             */
+            onSuccess(
+                "USSD request opened on SIM ${simSlot + 1}; awaiting network response"
+            )
         } catch (error: Exception) {
             Log.e(TAG, "Dialer fallback failed", error)
 
