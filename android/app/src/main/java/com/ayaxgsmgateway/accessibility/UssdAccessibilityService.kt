@@ -54,11 +54,22 @@ class UssdAccessibilityService : AccessibilityService() {
         val rootText = collectNodeText(rootInActiveWindow)
             .trim()
 
-        val message = when {
-            rootText.isNotBlank() -> rootText
-            eventText.isNotBlank() -> eventText
-            else -> ""
-        }
+        var message = when {
+    rootText.isNotBlank() -> rootText
+    eventText.isNotBlank() -> eventText
+    else -> ""
+}
+
+message = message.trim()
+
+// Kar a karɓi duplicate USSD popup
+if (
+    message.contains("Invalid selection", true) &&
+    prefs.getString(KEY_USSD_CODE, "") == "*310#"
+) {
+    Log.d(TAG, "Ignoring invalid selection popup")
+    return
+}
 
         Log.d(TAG, "RootText = $rootText")
         Log.d(TAG, "EventText = $eventText")
@@ -114,6 +125,14 @@ class UssdAccessibilityService : AccessibilityService() {
             ?.toString()
             ?.trim()
             .orEmpty()
+
+            if (
+    text.equals("Cancel", true) ||
+    text.equals("Send", true) ||
+    text.equals("OK", true)
+) {
+    return ""
+}
 
         if (text.isNotBlank()) {
             parts.add(text)
@@ -233,6 +252,10 @@ class UssdAccessibilityService : AccessibilityService() {
 
         return false
     }
+
+    Log.d(TAG, "ROOT = $rootText")
+    Log.d(TAG, "EVENT = $eventText")
+    Log.d(TAG, "FINAL = $message")
 
     private fun sendResultToBackend(
         message: String,
