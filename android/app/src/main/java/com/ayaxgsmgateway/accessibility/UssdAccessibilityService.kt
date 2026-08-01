@@ -1,6 +1,7 @@
 package com.ayaxgsmgateway.accessibility
 
 import android.accessibilityservice.AccessibilityService
+import android.content.SharedPreferences
 import android.os.SystemClock
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
@@ -14,75 +15,119 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.json.JSONObject
 import java.io.IOException
+import java.util.concurrent.TimeUnit
 
 class UssdAccessibilityService : AccessibilityService() {
 
-    private val client = OkHttpClient()
+    private val client =
+        OkHttpClient.Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .writeTimeout(20, TimeUnit.SECONDS)
+            .build()
 
     private var lastCapturedMessage = ""
     private var lastCapturedAt = 0L
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+    override fun onAccessibilityEvent(
+        event: AccessibilityEvent?
+    ) {
         if (event == null) return
 
         Log.d(
-    TAG,
-    "Event: ${event.eventType} Package=${event.packageName} Class=${event.className}"
-)
+            TAG,
+            "Event: ${event.eventType} " +
+                "Package=${event.packageName} " +
+                "Class=${event.className}"
+        )
 
         if (
-            event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
-            event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+            event.eventType !=
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
+            event.eventType !=
+            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
         ) {
             return
         }
 
-        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val prefs =
+            getSharedPreferences(
+                PREFS_NAME,
+                MODE_PRIVATE
+            )
 
-        val reference = prefs.getString(KEY_REFERENCE, null)
+        val reference =
+            prefs.getString(
+                KEY_REFERENCE,
+                null
+            )
 
-        // Kada service ya karanta komai idan babu pending USSD command
         if (reference.isNullOrBlank()) {
             return
         }
 
-        val eventText = event.text
-            ?.joinToString(" ")
-            ?.trim()
-            .orEmpty()
+        val eventText =
+            event.text
+                ?.joinToString(" ")
+                ?.trim()
+                .orEmpty()
 
-        val rootText = collectNodeText(rootInActiveWindow)
-            .trim()
+        val rootText =
+            collectNodeText(
+                rootInActiveWindow
+            ).trim()
 
-        var message = when {
-    rootText.isNotBlank() -> rootText
-    eventText.isNotBlank() -> eventText
-    else -> ""
-}
+        val message =
+            when {
+                rootText.isNotBlank() -> rootText
+                eventText.isNotBlank() -> eventText
+                else -> ""
+            }.trim()
 
-message = message.trim()
+        Log.d(TAG, "ROOT = $rootText")
+        Log.d(TAG, "EVENT = $eventText")
+        Log.d(TAG, "FINAL = $message")
 
-// Kar a karɓi duplicate USSD popup
-if (
-    message.contains("Invalid selection", true) &&
-    prefs.getString(KEY_USSD_CODE, "") == "*310#"
-) {
-    Log.d(TAG, "Ignoring invalid selection popup")
-    return
-}
+        if (message.isBlank()) {
+            return
+        }
 
-        Log.d(TAG, "RootText = $rootText")
-        Log.d(TAG, "EventText = $eventText")
-        Log.d(TAG, "FinalMessage = $message")
+        if (isOnlyActionButtonText(message)) {
+            return
+        }
 
-        if (message.isBlank()) return
+        val pendingCode =
+            prefs.getString(
+                KEY_USSD_CODE,
+                ""
+            ).orEmpty()
 
-        // Hana aika message ɗaya sau da yawa
-        val now = SystemClock.elapsedRealtime()
+        if (
+            pendingCode == "*310#" &&
+            message.contains(
+                "Invalid selection",
+                ignoreCase = true
+            )
+        ) {
+            Log.w(
+                TAG,
+                "Ignoring invalid selection popup for *310#: $message"
+            )
+
+            clickCloseButton(
+                rootInActiveWindow
+            )
+
+            return
+        }
+
+        val now =
+            SystemClock.elapsedRealtime()
 
         if (
             message == lastCapturedMessage &&
-            now - lastCapturedAt < DUPLICATE_WINDOW_MS
+            now - lastCapturedAt <
+            DUPLICATE_WINDOW_MS
         ) {
             return
         }
@@ -90,14 +135,26 @@ if (
         lastCapturedMessage = message
         lastCapturedAt = now
 
-        Log.d(TAG, "Captured USSD response: $message")
+        Log.d(
+            TAG,
+            "Captured USSD response: $message"
+        )
 
-        val waitingForSms = indicatesSmsResponse(message)
+        val waitingForSms =
+            indicatesSmsResponse(
+                message
+            )
 
         if (waitingForSms) {
             prefs.edit()
-                .putBoolean(KEY_WAITING_FOR_SMS, true)
-                .putLong(KEY_WAITING_SINCE, System.currentTimeMillis())
+                .putBoolean(
+                    KEY_WAITING_FOR_SMS,
+                    true
+                )
+                .putLong(
+                    KEY_WAITING_SINCE,
+                    System.currentTimeMillis()
+                )
                 .apply()
 
             sendResultToBackend(
@@ -113,45 +170,55 @@ if (
             )
         }
 
-        clickCloseButton(rootInActiveWindow)
+        clickCloseButton(
+            rootInActiveWindow
+        )
     }
 
-    private fun collectNodeText(node: AccessibilityNodeInfo?): String {
-        if (node == null) return ""
+    private fun collectNodeText(
+        node: AccessibilityNodeInfo?
+    ): String {
+        if (node == null) {
+            return ""
+        }
 
         val parts = mutableListOf<String>()
 
-        val text = node.text
-            ?.toString()
-            ?.trim()
-            .orEmpty()
+        val text =
+            node.text
+                ?.toString()
+                ?.trim()
+                .orEmpty()
 
-            if (
-    text.equals("Cancel", true) ||
-    text.equals("Send", true) ||
-    text.equals("OK", true)
-) {
-    return ""
-}
-
-        if (text.isNotBlank()) {
+        if (
+            text.isNotBlank() &&
+            !isActionButtonText(text)
+        ) {
             parts.add(text)
         }
 
-        val description = node.contentDescription
-            ?.toString()
-            ?.trim()
-            .orEmpty()
+        val description =
+            node.contentDescription
+                ?.toString()
+                ?.trim()
+                .orEmpty()
 
         if (
             description.isNotBlank() &&
+            !isActionButtonText(description) &&
             !parts.contains(description)
         ) {
             parts.add(description)
         }
 
-        for (index in 0 until node.childCount) {
-            val childText = collectNodeText(node.getChild(index))
+        for (
+            index in
+            0 until node.childCount
+        ) {
+            val childText =
+                collectNodeText(
+                    node.getChild(index)
+                )
 
             if (childText.isNotBlank()) {
                 parts.add(childText)
@@ -161,11 +228,45 @@ if (
         return parts
             .distinct()
             .joinToString(" ")
-            .replace(Regex("\\s+"), " ")
+            .replace(
+                Regex("\\s+"),
+                " "
+            )
             .trim()
     }
 
-    private fun indicatesSmsResponse(message: String): Boolean {
+    private fun isActionButtonText(
+        value: String
+    ): Boolean {
+        return value
+            .trim()
+            .uppercase() in ACTION_BUTTONS
+    }
+
+    private fun isOnlyActionButtonText(
+        value: String
+    ): Boolean {
+        val tokens =
+            value
+                .split(
+                    Regex("\\s+")
+                )
+                .map {
+                    it.trim().uppercase()
+                }
+                .filter {
+                    it.isNotBlank()
+                }
+
+        return tokens.isNotEmpty() &&
+            tokens.all {
+                it in ACTION_BUTTONS
+            }
+    }
+
+    private fun indicatesSmsResponse(
+        message: String
+    ): Boolean {
         val normalized = message.lowercase()
 
         return normalized.contains("receive an sms") ||
@@ -176,23 +277,24 @@ if (
             normalized.contains("an sms will be sent")
     }
 
-    private fun clickCloseButton(root: AccessibilityNodeInfo?) {
-        if (root == null) return
+    private fun clickCloseButton(
+        root: AccessibilityNodeInfo?
+    ) {
+        if (root == null) {
+            return
+        }
 
-        val buttonTexts = listOf(
-            "OK",
-            "CLOSE",
-            "CANCEL",
-            "DONE",
-            "DISMISS"
-        )
+        for (buttonText in ACTION_BUTTONS) {
+            val nodes =
+                root.findAccessibilityNodeInfosByText(
+                    buttonText
+                )
 
-        for (buttonText in buttonTexts) {
-            val nodes = root.findAccessibilityNodeInfosByText(buttonText)
-
-            val clickableNode = nodes?.firstOrNull {
-                it.isClickable && it.isEnabled
-            }
+            val clickableNode =
+                nodes?.firstOrNull {
+                    it.isClickable &&
+                        it.isEnabled
+                }
 
             if (clickableNode != null) {
                 clickableNode.performAction(
@@ -202,32 +304,25 @@ if (
             }
         }
 
-        // Wasu wayoyi suna sa button ba clickable ba,
-        // amma parent ɗinsa clickable ne.
         findAndClickActionableNode(root)
     }
 
     private fun findAndClickActionableNode(
         node: AccessibilityNodeInfo?
     ): Boolean {
-        if (node == null) return false
+        if (node == null) {
+            return false
+        }
 
-        val nodeText = node.text
-            ?.toString()
-            ?.trim()
-            ?.uppercase()
-            .orEmpty()
-
-        val supportedButtons = setOf(
-            "OK",
-            "CLOSE",
-            "CANCEL",
-            "DONE",
-            "DISMISS"
-        )
+        val nodeText =
+            node.text
+                ?.toString()
+                ?.trim()
+                ?.uppercase()
+                .orEmpty()
 
         if (
-            nodeText in supportedButtons &&
+            nodeText in ACTION_BUTTONS &&
             node.isEnabled
         ) {
             var target: AccessibilityNodeInfo? = node
@@ -245,7 +340,11 @@ if (
         }
 
         for (index in 0 until node.childCount) {
-            if (findAndClickActionableNode(node.getChild(index))) {
+            if (
+                findAndClickActionableNode(
+                    node.getChild(index)
+                )
+            ) {
                 return true
             }
         }
@@ -253,51 +352,61 @@ if (
         return false
     }
 
-    Log.d(TAG, "ROOT = $rootText")
-    Log.d(TAG, "EVENT = $eventText")
-    Log.d(TAG, "FINAL = $message")
-
     private fun sendResultToBackend(
         message: String,
         status: String,
         clearPendingRequest: Boolean
     ) {
-        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val prefs =
+            getSharedPreferences(
+                PREFS_NAME,
+                MODE_PRIVATE
+            )
 
         val reference = prefs.getString(KEY_REFERENCE, null)
         val deviceId = prefs.getString(KEY_DEVICE_ID, null)
         val secretKey = prefs.getString(KEY_SECRET_KEY, null)
         val simSlot = prefs.getInt(KEY_SIM_SLOT, 0)
-        val requestType = prefs.getString(KEY_REQUEST_TYPE, "USSD")
+        val requestType =
+            prefs.getString(
+                KEY_REQUEST_TYPE,
+                "USSD"
+            ) ?: "USSD"
 
         if (
             reference.isNullOrBlank() ||
             deviceId.isNullOrBlank() ||
             secretKey.isNullOrBlank()
         ) {
-            Log.e(TAG, "Pending USSD credentials are missing")
+            Log.e(
+                TAG,
+                "Pending USSD credentials are missing"
+            )
             return
         }
 
-        val json = JSONObject().apply {
-            put("deviceId", deviceId)
-            put("secretKey", secretKey)
-            put("reference", reference)
-            put("status", status)
-            put("message", message)
-            put("response", message)
-            put("simSlot", simSlot)
-            put("requestType", requestType)
-        }
+        val json =
+            JSONObject().apply {
+                put("deviceId", deviceId)
+                put("secretKey", secretKey)
+                put("reference", reference)
+                put("status", status)
+                put("message", message)
+                put("response", message)
+                put("simSlot", simSlot)
+                put("requestType", requestType)
+            }
 
-        val body = json
-            .toString()
-            .toRequestBody(JSON_MEDIA_TYPE)
+        val body =
+            json
+                .toString()
+                .toRequestBody(JSON_MEDIA_TYPE)
 
-        val request = Request.Builder()
-            .url(RESULT_URL)
-            .post(body)
-            .build()
+        val request =
+            Request.Builder()
+                .url(RESULT_URL)
+                .post(body)
+                .build()
 
         client.newCall(request).enqueue(
             object : Callback {
@@ -308,7 +417,8 @@ if (
                 ) {
                     Log.e(
                         TAG,
-                        "Backend callback failed: ${error.message}"
+                        "Backend callback failed: ${error.message}",
+                        error
                     )
                 }
 
@@ -317,7 +427,8 @@ if (
                     response: Response
                 ) {
                     response.use {
-                        val responseBody = it.body?.string().orEmpty()
+                        val responseBody =
+                            it.body?.string().orEmpty()
 
                         Log.d(
                             TAG,
@@ -337,7 +448,7 @@ if (
     }
 
     private fun clearPendingRequest(
-        prefs: android.content.SharedPreferences
+        prefs: SharedPreferences
     ) {
         prefs.edit()
             .remove(KEY_REFERENCE)
@@ -350,7 +461,10 @@ if (
     }
 
     override fun onInterrupt() {
-        Log.d(TAG, "Accessibility service interrupted")
+        Log.d(
+            TAG,
+            "Accessibility service interrupted"
+        )
     }
 
     companion object {
@@ -370,6 +484,16 @@ if (
             "https://api.ayaxapis.com/api/v1/gateway/result"
 
         private const val DUPLICATE_WINDOW_MS = 2_500L
+
+        private val ACTION_BUTTONS =
+            setOf(
+                "OK",
+                "CLOSE",
+                "CANCEL",
+                "DONE",
+                "DISMISS",
+                "SEND"
+            )
 
         private val JSON_MEDIA_TYPE =
             "application/json; charset=utf-8".toMediaType()
