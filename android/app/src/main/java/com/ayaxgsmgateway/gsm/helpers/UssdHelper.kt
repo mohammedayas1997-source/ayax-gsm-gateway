@@ -18,7 +18,7 @@ object UssdHelper {
     private const val TAG = "AYAX_USSD"
     private const val PREFS_NAME = "AYAX_USSD"
 
-    fun sendUssd(
+   fun sendUssd(
     context: Context,
     ussdCode: String,
     simSlot: Int,
@@ -31,6 +31,11 @@ object UssdHelper {
     Log.e(TAG, "SIM = $simSlot")
 
     try {
+        ...
+    } catch (e: Exception) {
+        ...
+    }
+}
         try {
             if (
                 context.checkSelfPermission(Manifest.permission.CALL_PHONE) !=
