@@ -51,26 +51,6 @@ object UssdHelper {
                 simSlot = simSlot,
                 subscriptionId = subscriptionId
             )
-            val requestType = detectRequestType(ussdCode)
-
-if (requestType == "AIRTIME") {
-
-    Log.d(
-        TAG,
-        "AIRTIME request -> Dialer only"
-    )
-
-    openDialerFallback(
-        context = context,
-        ussdCode = ussdCode,
-        subscriptionId = subscriptionId,
-        simSlot = simSlot,
-        onSuccess = onSuccess,
-        onError = onError
-    )
-
-    return
-}
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 sendWithCallback(
@@ -254,7 +234,9 @@ if (requestType == "AIRTIME") {
                     "subscription $subscriptionId"
             )
 
-           
+            onSuccess(
+                "USSD request opened on SIM ${simSlot + 1}; awaiting network response"
+            )
         } catch (error: Exception) {
             Log.e(TAG, "Dialer fallback failed", error)
 
