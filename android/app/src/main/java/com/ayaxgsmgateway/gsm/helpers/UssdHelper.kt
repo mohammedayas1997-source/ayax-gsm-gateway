@@ -10,21 +10,13 @@ import android.os.Handler
 import android.os.Looper
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
-import android.telephony.SubscriptionManager
 import android.telephony.TelephonyManager
 import android.util.Log
-import java.util.concurrent.atomic.AtomicBoolean
 
 object UssdHelper {
 
     private const val TAG = "AYAX_USSD"
     private const val PREFS_NAME = "AYAX_USSD"
-
-    /*
-     * Idan native USSD bai dawo da response ba,
-     * bayan sakan 12 za a gwada Dialer.
-     */
-    private const val NATIVE_TIMEOUT_MS = 12_000L
 
     fun sendUssd(
         context: Context,
@@ -39,29 +31,15 @@ object UssdHelper {
                     Manifest.permission.CALL_PHONE
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
-                onError(
-                    "CALL_PHONE permission not granted"
-                )
+                onError("CALL_PHONE permission not granted")
                 return
             }
 
             val cleanUssdCode =
-                ussdCode
-                    .replace(" ", "")
-                    .trim()
+                ussdCode.trim()
 
             if (cleanUssdCode.isBlank()) {
                 onError("USSD code is required")
-                return
-            }
-
-            if (
-                !cleanUssdCode.startsWith("*") ||
-                !cleanUssdCode.endsWith("#")
-            ) {
-                onError(
-                    "Invalid USSD format: $cleanUssdCode"
-                )
                 return
             }
 
@@ -72,157 +50,45 @@ object UssdHelper {
                         simSlot
                     )
 
-            if (
-                subscriptionId ==
-                SubscriptionManager
-                    .INVALID_SUBSCRIPTION_ID
-            ) {
-                onError(
-                    "No active subscription found for SIM ${simSlot + 1}"
-                )
-                return
-            }
-
-            val requestType =
-                detectRequestType(
-                    cleanUssdCode
-                )
-
             Log.d(
                 TAG,
-                "USSD command received: " +
-                    "code=$cleanUssdCode, " +
-                    "type=$requestType, " +
-                    "simSlot=$simSlot, " +
-                    "subscriptionId=$subscriptionId"
+                "Command received: code=$cleanUssdCode, " +
+                    "simSlot=$simSlot, subscriptionId=$subscriptionId"
             )
 
             savePendingMetadata(
                 context = context,
                 ussdCode = cleanUssdCode,
                 simSlot = simSlot,
-                subscriptionId =
-                    subscriptionId
+                subscriptionId = subscriptionId
             )
 
-            when (requestType) {
-
-                /*
-                 * DATA:
-                 * An bar tsarin DATA yadda yake.
-                 */
-                "DATA" -> {
-                    if (
-                        Build.VERSION.SDK_INT >=
-                        Build.VERSION_CODES.O
-                    ) {
-                        sendWithCallback(
-                            context = context,
-                            ussdCode =
-                                cleanUssdCode,
-                            subscriptionId =
-                                subscriptionId,
-                            simSlot = simSlot,
-                            useTimeoutFallback =
-                                false,
-                            onSuccess =
-                                onSuccess,
-                            onError =
-                                onError
-                        )
-                    } else {
-                        openDialerFallback(
-                            context = context,
-                            ussdCode =
-                                cleanUssdCode,
-                            subscriptionId =
-                                subscriptionId,
-                            simSlot = simSlot,
-                            onSuccess =
-                                onSuccess,
-                            onError =
-                                onError
-                        )
-                    }
-                }
-
-                /*
-                 * AIRTIME:
-                 * Native callback da farko.
-                 * Idan bai dawo ba, Dialer fallback.
-                 */
-                "AIRTIME" -> {
-                    if (
-                        Build.VERSION.SDK_INT >=
-                        Build.VERSION_CODES.O
-                    ) {
-                        sendWithCallback(
-                            context = context,
-                            ussdCode =
-                                cleanUssdCode,
-                            subscriptionId =
-                                subscriptionId,
-                            simSlot = simSlot,
-                            useTimeoutFallback =
-                                true,
-                            onSuccess =
-                                onSuccess,
-                            onError =
-                                onError
-                        )
-                    } else {
-                        openDialerFallback(
-                            context = context,
-                            ussdCode =
-                                cleanUssdCode,
-                            subscriptionId =
-                                subscriptionId,
-                            simSlot = simSlot,
-                            onSuccess =
-                                onSuccess,
-                            onError =
-                                onError
-                        )
-                    }
-                }
-
-                /*
-                 * Sauran USSD commands.
-                 */
-                else -> {
-                    if (
-                        Build.VERSION.SDK_INT >=
-                        Build.VERSION_CODES.O
-                    ) {
-                        sendWithCallback(
-                            context = context,
-                            ussdCode =
-                                cleanUssdCode,
-                            subscriptionId =
-                                subscriptionId,
-                            simSlot = simSlot,
-                            useTimeoutFallback =
-                                true,
-                            onSuccess =
-                                onSuccess,
-                            onError =
-                                onError
-                        )
-                    } else {
-                        openDialerFallback(
-                            context = context,
-                            ussdCode =
-                                cleanUssdCode,
-                            subscriptionId =
-                                subscriptionId,
-                            simSlot = simSlot,
-                            onSuccess =
-                                onSuccess,
-                            onError =
-                                onError
-                        )
-                    }
-                }
+            /*
+             * DATA an bar shi yadda yake.
+             * AIRTIME da sauran USSD za su bi
+             * native callback kamar yadda command
+             * yake aiki a baya.
+             */
+            if (
+                Build.VERSION.SDK_INT >=
+                Build.VERSION_CODES.O
+            ) {
+                sendWithCallback(
+                    context = context,
+                    ussdCode = cleanUssdCode,
+                    subscriptionId = subscriptionId,
+                    simSlot = simSlot,
+                    onSuccess = onSuccess,
+                    onError = onError
+                )
+            } else {
+                openDialerFallback(
+                    context = context,
+                    ussdCode = cleanUssdCode,
+                    subscriptionId = subscriptionId,
+                    simSlot = simSlot,
+                    onError = onError
+                )
             }
         } catch (error: Exception) {
             Log.e(
@@ -232,8 +98,7 @@ object UssdHelper {
             )
 
             onError(
-                error.message
-                    ?: "USSD command failed"
+                error.message ?: "USSD failed"
             )
         }
     }
@@ -243,74 +108,26 @@ object UssdHelper {
         ussdCode: String,
         subscriptionId: Int,
         simSlot: Int,
-        useTimeoutFallback: Boolean,
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
-        val mainHandler =
-            Handler(Looper.getMainLooper())
-
-        val completed =
-            AtomicBoolean(false)
-
-        var timeoutRunnable:
-            Runnable? = null
-
         try {
-            val baseTelephonyManager =
+            val telephonyManager =
                 context.getSystemService(
                     Context.TELEPHONY_SERVICE
                 ) as TelephonyManager
 
             val simTelephonyManager =
-                baseTelephonyManager
+                telephonyManager
                     .createForSubscriptionId(
                         subscriptionId
                     )
 
             Log.d(
                 TAG,
-                "Sending native USSD: " +
-                    "$ussdCode on SIM ${simSlot + 1}, " +
-                    "subscription=$subscriptionId"
+                "Sending native USSD: code=$ussdCode, " +
+                    "simSlot=$simSlot, subscriptionId=$subscriptionId"
             )
-
-            if (useTimeoutFallback) {
-                timeoutRunnable =
-                    Runnable {
-                        if (
-                            completed.compareAndSet(
-                                false,
-                                true
-                            )
-                        ) {
-                            Log.w(
-                                TAG,
-                                "Native USSD timeout. " +
-                                    "Opening dialer fallback."
-                            )
-
-                            openDialerFallback(
-                                context = context,
-                                ussdCode =
-                                    ussdCode,
-                                subscriptionId =
-                                    subscriptionId,
-                                simSlot =
-                                    simSlot,
-                                onSuccess =
-                                    onSuccess,
-                                onError =
-                                    onError
-                            )
-                        }
-                    }
-
-                mainHandler.postDelayed(
-                    timeoutRunnable,
-                    NATIVE_TIMEOUT_MS
-                )
-            }
 
             simTelephonyManager.sendUssdRequest(
                 ussdCode,
@@ -326,20 +143,6 @@ object UssdHelper {
                         response:
                             CharSequence?
                     ) {
-                        if (
-                            !completed.compareAndSet(
-                                false,
-                                true
-                            )
-                        ) {
-                            return
-                        }
-
-                        timeoutRunnable?.let {
-                            mainHandler
-                                .removeCallbacks(it)
-                        }
-
                         val message =
                             response
                                 ?.toString()
@@ -353,18 +156,12 @@ object UssdHelper {
 
                         if (message.isBlank()) {
                             openDialerFallback(
-                                context =
-                                    context,
-                                ussdCode =
-                                    ussdCode,
+                                context = context,
+                                ussdCode = ussdCode,
                                 subscriptionId =
                                     subscriptionId,
-                                simSlot =
-                                    simSlot,
-                                onSuccess =
-                                    onSuccess,
-                                onError =
-                                    onError
+                                simSlot = simSlot,
+                                onError = onError
                             )
 
                             return
@@ -379,72 +176,42 @@ object UssdHelper {
                         request: String?,
                         failureCode: Int
                     ) {
-                        if (
-                            !completed.compareAndSet(
-                                false,
-                                true
-                            )
-                        ) {
-                            return
-                        }
-
-                        timeoutRunnable?.let {
-                            mainHandler
-                                .removeCallbacks(it)
-                        }
-
                         Log.w(
                             TAG,
                             "Native USSD failed: " +
-                                "code=$failureCode, " +
-                                "request=$request"
+                                "request=$request, code=$failureCode"
                         )
 
                         openDialerFallback(
                             context = context,
-                            ussdCode =
-                                ussdCode,
+                            ussdCode = ussdCode,
                             subscriptionId =
                                 subscriptionId,
                             simSlot = simSlot,
-                            onSuccess =
-                                onSuccess,
-                            onError =
-                                onError
+                            onError = onError
                         )
                     }
                 },
 
-                mainHandler
+                Handler(
+                    Looper.getMainLooper()
+                )
             )
         } catch (error: Exception) {
-            timeoutRunnable?.let {
-                mainHandler.removeCallbacks(it)
-            }
-
             Log.e(
                 TAG,
-                "Native USSD failed; " +
-                    "opening dialer fallback",
+                "Native USSD error; using dialer fallback",
                 error
             )
 
-            if (
-                completed.compareAndSet(
-                    false,
-                    true
-                )
-            ) {
-                openDialerFallback(
-                    context = context,
-                    ussdCode = ussdCode,
-                    subscriptionId =
-                        subscriptionId,
-                    simSlot = simSlot,
-                    onSuccess = onSuccess,
-                    onError = onError
-                )
-            }
+            openDialerFallback(
+                context = context,
+                ussdCode = ussdCode,
+                subscriptionId =
+                    subscriptionId,
+                simSlot = simSlot,
+                onError = onError
+            )
         }
     }
 
@@ -453,7 +220,6 @@ object UssdHelper {
         ussdCode: String,
         subscriptionId: Int,
         simSlot: Int,
-        onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
         try {
@@ -461,16 +227,18 @@ object UssdHelper {
                 context = context,
                 ussdCode = ussdCode,
                 simSlot = simSlot,
-                subscriptionId =
-                    subscriptionId
+                subscriptionId = subscriptionId
             )
 
             /*
-             * Uri.encode() zai kare # da sauran
-             * special characters yadda ya dace.
+             * A encode # kawai kamar tsarin
+             * da yake aiki a baya.
              */
             val encodedCode =
-                Uri.encode(ussdCode)
+                ussdCode.replace(
+                    "#",
+                    Uri.encode("#")
+                )
 
             val phoneAccountHandle =
                 findPhoneAccountHandle(
@@ -482,9 +250,7 @@ object UssdHelper {
             val intent =
                 Intent(
                     Intent.ACTION_CALL,
-                    Uri.parse(
-                        "tel:$encodedCode"
-                    )
+                    Uri.parse("tel:$encodedCode")
                 ).apply {
                     addFlags(
                         Intent.FLAG_ACTIVITY_NEW_TASK
@@ -520,10 +286,7 @@ object UssdHelper {
                         subscriptionId
                     )
 
-                    if (
-                        phoneAccountHandle !=
-                        null
-                    ) {
+                    if (phoneAccountHandle != null) {
                         putExtra(
                             TelecomManager
                                 .EXTRA_PHONE_ACCOUNT_HANDLE,
@@ -536,16 +299,10 @@ object UssdHelper {
 
             Log.d(
                 TAG,
-                "Dialer fallback opened: " +
-                    "$ussdCode on SIM ${simSlot + 1}, " +
-                    "subscription=$subscriptionId"
+                "Dialer fallback started: " +
+                    "code=$ussdCode, simSlot=$simSlot, " +
+                    "subscriptionId=$subscriptionId"
             )
-
-            /*
-             * Kada a kira onSuccess a nan.
-             * Accessibility Service ne zai karɓi
-             * USSD dialog response.
-             */
         } catch (error: Exception) {
             Log.e(
                 TAG,
@@ -555,7 +312,7 @@ object UssdHelper {
 
             onError(
                 error.message
-                    ?: "Unable to execute USSD on selected SIM"
+                    ?: "Unable to open USSD on selected SIM"
             )
         }
     }
@@ -664,7 +421,9 @@ object UssdHelper {
                     subscriptionId.toString(),
                     ignoreCase = true
                 )
-            } ?: accounts.getOrNull(simSlot)
+            } ?: accounts.getOrNull(
+                simSlot
+            )
         } catch (error: Exception) {
             Log.e(
                 TAG,
