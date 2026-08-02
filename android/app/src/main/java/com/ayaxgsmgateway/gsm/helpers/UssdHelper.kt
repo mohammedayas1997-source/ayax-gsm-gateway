@@ -19,12 +19,18 @@ object UssdHelper {
     private const val PREFS_NAME = "AYAX_USSD"
 
     fun sendUssd(
-        context: Context,
-        ussdCode: String,
-        simSlot: Int,
-        onSuccess: (String) -> Unit,
-        onError: (String) -> Unit
-    ) {
+    context: Context,
+    ussdCode: String,
+    simSlot: Int,
+    onSuccess: (String) -> Unit,
+    onError: (String) -> Unit
+) {
+
+    Log.e(TAG, "============== SEND USSD START ==============")
+    Log.e(TAG, "USSD = $ussdCode")
+    Log.e(TAG, "SIM = $simSlot")
+
+    try {
         try {
             if (
                 context.checkSelfPermission(Manifest.permission.CALL_PHONE) !=
@@ -92,6 +98,9 @@ object UssdHelper {
 
             val simTelephonyManager =
                 telephonyManager.createForSubscriptionId(subscriptionId)
+
+            Log.e(TAG, "Trying Native USSD")
+            Log.e(TAG, "SubscriptionId = $subscriptionId")
 
             simTelephonyManager.sendUssdRequest(
                 ussdCode,
@@ -238,7 +247,15 @@ object UssdHelper {
                     }
                 }
 
+            Log.e(TAG, "Opening dialer...")
+            Log.e(TAG, "Subscription = $subscriptionId")
+            Log.e(TAG, "SIM Slot = $simSlot")
+            Log.e(TAG, "Encoded = $encodedCode")
+            Log.e(TAG, "PhoneAccount = $phoneAccountHandle")
+
             context.startActivity(intent)
+            Log.e(TAG, "Dialer opened successfully")
+            Log.e(TAG, "ACTION_CALL SENT")
 
             Log.d(
                 TAG,
