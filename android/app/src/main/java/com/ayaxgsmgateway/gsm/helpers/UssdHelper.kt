@@ -27,55 +27,55 @@ object UssdHelper {
     ) {
         try {
             if (
-                context.checkSelfPermission(
-                    Manifest.permission.CALL_PHONE
-                ) != PackageManager.PERMISSION_GRANTED
+                context.checkSelfPermission(Manifest.permission.CALL_PHONE) !=
+                PackageManager.PERMISSION_GRANTED
             ) {
                 onError("CALL_PHONE permission not granted")
                 return
             }
 
-            val cleanUssdCode =
-                ussdCode.trim()
-
-            if (cleanUssdCode.isBlank()) {
+            if (ussdCode.isBlank()) {
                 onError("USSD code is required")
                 return
             }
 
             val subscriptionId =
-                SubscriptionHelper
-                    .getSubscriptionIdBySlot(
-                        context,
-                        simSlot
-                    )
-
-            Log.d(
-                TAG,
-                "Command received: code=$cleanUssdCode, " +
-                    "simSlot=$simSlot, subscriptionId=$subscriptionId"
-            )
+                SubscriptionHelper.getSubscriptionIdBySlot(
+                    context,
+                    simSlot
+                )
 
             savePendingMetadata(
                 context = context,
-                ussdCode = cleanUssdCode,
+                ussdCode = ussdCode,
                 simSlot = simSlot,
                 subscriptionId = subscriptionId
             )
+            val requestType = detectRequestType(ussdCode)
 
-            /*
-             * DATA an bar shi yadda yake.
-             * AIRTIME da sauran USSD za su bi
-             * native callback kamar yadda command
-             * yake aiki a baya.
-             */
-            if (
-                Build.VERSION.SDK_INT >=
-                Build.VERSION_CODES.O
-            ) {
+if (requestType == "AIRTIME") {
+
+    Log.d(
+        TAG,
+        "AIRTIME request -> Dialer only"
+    )
+
+    openDialerFallback(
+        context = context,
+        ussdCode = ussdCode,
+        subscriptionId = subscriptionId,
+        simSlot = simSlot,
+        onSuccess = onSuccess,
+        onError = onError
+    )
+
+    return
+}
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 sendWithCallback(
                     context = context,
-                    ussdCode = cleanUssdCode,
+                    ussdCode = ussdCode,
                     subscriptionId = subscriptionId,
                     simSlot = simSlot,
                     onSuccess = onSuccess,
@@ -84,22 +84,16 @@ object UssdHelper {
             } else {
                 openDialerFallback(
                     context = context,
-                    ussdCode = cleanUssdCode,
+                    ussdCode = ussdCode,
                     subscriptionId = subscriptionId,
                     simSlot = simSlot,
+                    onSuccess = onSuccess,
                     onError = onError
                 )
             }
         } catch (error: Exception) {
-            Log.e(
-                TAG,
-                "sendUssd failed",
-                error
-            )
-
-            onError(
-                error.message ?: "USSD failed"
-            )
+            Log.e(TAG, "sendUssd failed", error)
+            onError(error.message ?: "USSD failed")
         }
     }
 
@@ -113,35 +107,20 @@ object UssdHelper {
     ) {
         try {
             val telephonyManager =
-                context.getSystemService(
-                    Context.TELEPHONY_SERVICE
-                ) as TelephonyManager
+                context.getSystemService(Context.TELEPHONY_SERVICE)
+                    as TelephonyManager
 
             val simTelephonyManager =
-                telephonyManager
-                    .createForSubscriptionId(
-                        subscriptionId
-                    )
-
-            Log.d(
-                TAG,
-                "Sending native USSD: code=$ussdCode, " +
-                    "simSlot=$simSlot, subscriptionId=$subscriptionId"
-            )
+                telephonyManager.createForSubscriptionId(subscriptionId)
 
             simTelephonyManager.sendUssdRequest(
                 ussdCode,
-
-                object :
-                    TelephonyManager
-                        .UssdResponseCallback() {
+                object : TelephonyManager.UssdResponseCallback() {
 
                     override fun onReceiveUssdResponse(
-                        telephonyManager:
-                            TelephonyManager?,
+                        telephonyManager: TelephonyManager?,
                         request: String?,
-                        response:
-                            CharSequence?
+                        response: CharSequence?
                     ) {
                         val message =
                             response
@@ -149,67 +128,62 @@ object UssdHelper {
                                 ?.trim()
                                 .orEmpty()
 
-                        Log.d(
-                            TAG,
-                            "Native USSD response: $message"
-                        )
-
                         if (message.isBlank()) {
                             openDialerFallback(
                                 context = context,
                                 ussdCode = ussdCode,
-                                subscriptionId =
-                                    subscriptionId,
+                                subscriptionId = subscriptionId,
                                 simSlot = simSlot,
+                                onSuccess = onSuccess,
                                 onError = onError
                             )
-
                             return
                         }
 
+                        Log.d(TAG, "Native USSD response: $message")
                         onSuccess(message)
                     }
 
                     override fun onReceiveUssdResponseFailed(
-                        telephonyManager:
-                            TelephonyManager?,
+                        telephonyManager: TelephonyManager?,
                         request: String?,
                         failureCode: Int
                     ) {
                         Log.w(
                             TAG,
-                            "Native USSD failed: " +
-                                "request=$request, code=$failureCode"
+                            "Native USSD failed with code: $failureCode"
                         )
 
-                        openDialerFallback(
-                            context = context,
-                            ussdCode = ussdCode,
-                            subscriptionId =
-                                subscriptionId,
-                            simSlot = simSlot,
-                            onError = onError
-                        )
+                        if (failureCode == -1) {
+                            openDialerFallback(
+                                context = context,
+                                ussdCode = ussdCode,
+                                subscriptionId = subscriptionId,
+                                simSlot = simSlot,
+                                onSuccess = onSuccess,
+                                onError = onError
+                            )
+                            return
+                        }
+
+                        onError("USSD failed with code: $failureCode")
                     }
                 },
-
-                Handler(
-                    Looper.getMainLooper()
-                )
+                Handler(Looper.getMainLooper())
             )
         } catch (error: Exception) {
             Log.e(
                 TAG,
-                "Native USSD error; using dialer fallback",
+                "Native USSD callback failed; using dialer fallback",
                 error
             )
 
             openDialerFallback(
                 context = context,
                 ussdCode = ussdCode,
-                subscriptionId =
-                    subscriptionId,
+                subscriptionId = subscriptionId,
                 simSlot = simSlot,
+                onSuccess = onSuccess,
                 onError = onError
             )
         }
@@ -220,6 +194,7 @@ object UssdHelper {
         ussdCode: String,
         subscriptionId: Int,
         simSlot: Int,
+        onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
         try {
@@ -230,10 +205,6 @@ object UssdHelper {
                 subscriptionId = subscriptionId
             )
 
-            /*
-             * A encode # kawai kamar tsarin
-             * da yake aiki a baya.
-             */
             val encodedCode =
                 ussdCode.replace(
                     "#",
@@ -252,35 +223,16 @@ object UssdHelper {
                     Intent.ACTION_CALL,
                     Uri.parse("tel:$encodedCode")
                 ).apply {
-                    addFlags(
-                        Intent.FLAG_ACTIVITY_NEW_TASK
-                    )
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
                     putExtra(
                         "com.android.phone.extra.slot",
                         simSlot
                     )
-
-                    putExtra(
-                        "slot",
-                        simSlot
-                    )
-
-                    putExtra(
-                        "simSlot",
-                        simSlot
-                    )
-
-                    putExtra(
-                        "subscription",
-                        subscriptionId
-                    )
-
-                    putExtra(
-                        "subscription_id",
-                        subscriptionId
-                    )
-
+                    putExtra("slot", simSlot)
+                    putExtra("simSlot", simSlot)
+                    putExtra("subscription", subscriptionId)
+                    putExtra("subscription_id", subscriptionId)
                     putExtra(
                         "android.telephony.extra.SUBSCRIPTION_INDEX",
                         subscriptionId
@@ -288,8 +240,7 @@ object UssdHelper {
 
                     if (phoneAccountHandle != null) {
                         putExtra(
-                            TelecomManager
-                                .EXTRA_PHONE_ACCOUNT_HANDLE,
+                            TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE,
                             phoneAccountHandle
                         )
                     }
@@ -299,16 +250,13 @@ object UssdHelper {
 
             Log.d(
                 TAG,
-                "Dialer fallback started: " +
-                    "code=$ussdCode, simSlot=$simSlot, " +
-                    "subscriptionId=$subscriptionId"
+                "Dialer fallback started on SIM slot $simSlot, " +
+                    "subscription $subscriptionId"
             )
+
+           
         } catch (error: Exception) {
-            Log.e(
-                TAG,
-                "Dialer fallback failed",
-                error
-            )
+            Log.e(TAG, "Dialer fallback failed", error)
 
             onError(
                 error.message
@@ -330,45 +278,19 @@ object UssdHelper {
             )
 
         val existingReference =
-            prefs.getString(
-                "reference",
-                null
-            )
+            prefs.getString("reference", null)
 
         val requestType =
-            detectRequestType(
-                ussdCode
-            )
+            detectRequestType(ussdCode)
 
         prefs.edit()
-            .putString(
-                "reference",
-                existingReference
-            )
-            .putString(
-                "ussdCode",
-                ussdCode
-            )
-            .putInt(
-                "simSlot",
-                simSlot
-            )
-            .putInt(
-                "subscriptionId",
-                subscriptionId
-            )
-            .putString(
-                "requestType",
-                requestType
-            )
-            .putBoolean(
-                "waitingForSms",
-                false
-            )
-            .putLong(
-                "requestedAt",
-                System.currentTimeMillis()
-            )
+            .putString("reference", existingReference)
+            .putString("ussdCode", ussdCode)
+            .putInt("simSlot", simSlot)
+            .putInt("subscriptionId", subscriptionId)
+            .putString("requestType", requestType)
+            .putBoolean("waitingForSms", false)
+            .putLong("requestedAt", System.currentTimeMillis())
             .apply()
     }
 
@@ -380,10 +302,6 @@ object UssdHelper {
                 .replace(" ", "")
                 .uppercase()
 
-        /*
-         * BANGAREN DATA:
-         * An bar shi yadda yake.
-         */
         return when {
             normalized.contains("*323#") ||
                 normalized.contains("*312#") ||
@@ -391,13 +309,12 @@ object UssdHelper {
                 normalized.contains("*127#") ->
                 "DATA"
 
-            normalized.startsWith("*310") ||
-                normalized.startsWith("*556") ||
-                normalized.startsWith("*123") ->
+            normalized.contains("*310#") ||
+                normalized.contains("*556#") ||
+                normalized.contains("*123#") ->
                 "AIRTIME"
 
-            else ->
-                "USSD"
+            else -> "USSD"
         }
     }
 
@@ -413,24 +330,20 @@ object UssdHelper {
                 ) as TelecomManager
 
             val accounts =
-                telecomManager
-                    .callCapablePhoneAccounts
+                telecomManager.callCapablePhoneAccounts
 
             accounts.firstOrNull { handle ->
                 handle.id.contains(
                     subscriptionId.toString(),
                     ignoreCase = true
                 )
-            } ?: accounts.getOrNull(
-                simSlot
-            )
+            } ?: accounts.getOrNull(simSlot)
         } catch (error: Exception) {
             Log.e(
                 TAG,
                 "Unable to resolve phone account handle",
                 error
             )
-
             null
         }
     }
