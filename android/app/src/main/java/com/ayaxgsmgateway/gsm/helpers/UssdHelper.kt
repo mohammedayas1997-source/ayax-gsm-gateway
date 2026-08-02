@@ -173,8 +173,7 @@ object UssdHelper {
     simSlot: Int,
     onSuccess: (String) -> Unit,
     onError: (String) -> Unit
-)
- {
+) {
         try {
             savePendingMetadata(
                 context = context,
