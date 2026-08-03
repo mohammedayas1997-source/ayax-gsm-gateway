@@ -545,7 +545,7 @@ private fun collectNodeText(
 
 
 
-   private fun clickSendButton(
+private fun clickSendButton(
     node: AccessibilityNodeInfo?
 ) {
 
@@ -562,8 +562,7 @@ private fun collectNodeText(
 
     for (word in keywords) {
 
-        val nodes =
-            node.findAccessibilityNodeInfosByText(word)
+        val nodes = node.findAccessibilityNodeInfosByText(word)
 
         if (!nodes.isNullOrEmpty()) {
 
@@ -592,33 +591,6 @@ private fun collectNodeText(
         false
     )
 }
-
-
-                Log.d(
-                    TAG,
-                    "Clicked -> $word"
-                )
-
-
-                return
-
-            }
-
-        }
-
-
-
-
-        for(i in 0 until node.childCount){
-
-
-            clickSendButton(
-                node.getChild(i)
-            )
-
-        }
-
-    }
 
 
 
