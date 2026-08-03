@@ -10,8 +10,7 @@ import android.content.Intent
 import android.net.Uri
 import com.ayaxgsmgateway.gsm.helpers.SmsHelper
 import com.ayaxgsmgateway.gsm.helpers.UssdHelper
-import com.ayaxgsmgateway.gsm.helpers.UssdReplyManager
-import com.ayaxgsmgateway.gsm.manager.UssdReplyManager
+import com.ayaxgsmgateway.accessibility.UssdReplyManager
 
 class GsmModule(private val reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
