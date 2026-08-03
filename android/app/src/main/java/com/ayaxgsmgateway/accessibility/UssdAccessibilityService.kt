@@ -273,13 +273,17 @@ class UssdAccessibilityService : AccessibilityService() {
         clickCloseButton(rootInActiveWindow)
     }, 1000)
 }
-    
-    private fun collectNodeText(
-        node: AccessibilityNodeInfo?
-    ): String {
 
-        if (node == null) return ""
+} // <-- Rufe onAccessibilityEvent() a nan
 
+private fun collectNodeText(
+    node: AccessibilityNodeInfo?
+): String {
+
+    if (node == null) return ""
+
+    ...
+}
         val builder = StringBuilder()
 
 
