@@ -274,44 +274,32 @@ class UssdAccessibilityService : AccessibilityService() {
     }, 1000)
 }
 
-} // <-- Rufe onAccessibilityEvent() a nan
-
 private fun collectNodeText(
     node: AccessibilityNodeInfo?
 ): String {
 
-    if (node == null) return ""
-
-    ...
-}
-        val builder = StringBuilder()
-
-
-        node.text?.let {
-            builder.append(it.toString())
-                .append("\n")
-        }
-
-
-        node.contentDescription?.let {
-            builder.append(it.toString())
-                .append("\n")
-        }
-
-
-        for (i in 0 until node.childCount) {
-
-            builder.append(
-                collectNodeText(
-                    node.getChild(i)
-                )
-            )
-
-        }
-
-
-        return builder.toString().trim()
+    if (node == null) {
+        return ""
     }
+
+    val builder = StringBuilder()
+
+    node.text?.let {
+        builder.append(it.toString()).append("\n")
+    }
+
+    node.contentDescription?.let {
+        builder.append(it.toString()).append("\n")
+    }
+
+    for (i in 0 until node.childCount) {
+        builder.append(
+            collectNodeText(node.getChild(i))
+        )
+    }
+
+    return builder.toString().trim()
+}
 
 
 
@@ -366,14 +354,17 @@ private fun collectNodeText(
             if(!nodes.isNullOrEmpty()){
 
 
-                val ok = nodes.first().performAction(
-                    AccessibilityNodeInfo.ACTION_CLICK
-                )
+                nodes.first().performAction(
+    AccessibilityNodeInfo.ACTION_CLICK
+)
 
-                Log.d(TAG, "Send clicked = $ok")
+sendResultToBackend(
+    "Clicked button: $word",
+    "DEBUG",
+    false
+)
 
-
-                return
+return
 
             }
 
