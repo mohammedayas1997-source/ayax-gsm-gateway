@@ -10,6 +10,8 @@ import android.content.Intent
 import android.net.Uri
 import com.ayaxgsmgateway.gsm.helpers.SmsHelper
 import com.ayaxgsmgateway.gsm.helpers.UssdHelper
+import com.ayaxgsmgateway.gsm.helpers.UssdReplyManager
+import com.ayaxgsmgateway.gsm.manager.UssdReplyManager
 
 class GsmModule(private val reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
@@ -51,6 +53,38 @@ fun sendSms(phoneNumber: String, message: String, promise: Promise) {
     promise.reject("SMS_ERROR", e.message)
   }
 }
+
+@ReactMethod
+fun setUssdReplies(
+    replies: ReadableArray,
+    promise: Promise
+) {
+
+    try {
+
+        com.ayaxgsmgateway.gsm.manager.UssdReplyManager.clear()
+
+        for (i in 0 until replies.size()) {
+
+            com.ayaxgsmgateway.gsm.manager.UssdReplyManager.add(
+                replies.getString(i) ?: ""
+            )
+
+        }
+
+        promise.resolve(true)
+
+    } catch (e: Exception) {
+
+        promise.reject(
+            "USSD_REPLY_ERROR",
+            e.message
+        )
+
+    }
+
+}
+
 @ReactMethod
 fun sendSmsWithSim(
     phoneNumber: String,
@@ -84,14 +118,7 @@ fun sendSmsWithSim(
         promise.reject("SMS_ERROR", e.message)
     }
 }
-@ReactMethod
-fun sendUssd(
-  ussdCode: String,
-  reference: String,
-  deviceId: String,
-  secretKey: String,
-  promise: Promise
-) {
+ {
   try {
     if (
       reactContext.checkSelfPermission(Manifest.permission.CALL_PHONE)
@@ -162,23 +189,12 @@ fun sendUssdWithSim(
 
             { response ->
 
-                val map =
-                    Arguments.createMap()
+                val map = Arguments.createMap()
 
-                map.putBoolean(
-                    "success",
-                    true
-                )
-
-                map.putString(
-                    "response",
-                    response
-                )
-
-                map.putInt(
-                    "simSlot",
-                    simSlot
-                )
+                map.putBoolean("success", true)
+                map.putString("response", response)
+                map.putString("reference", reference)
+                map.putInt("simSlot", simSlot)
 
                 promise.resolve(map)
 
@@ -203,6 +219,7 @@ fun sendUssdWithSim(
         )
 
     }
+
 }
 
 @ReactMethod

@@ -17,7 +17,9 @@ export const sendUssd = async ({
   ussdCode,
   reference,
   simSlot = 0,
+  replies = [],
 }) => {
+
   const granted = await requestUssdPermission();
 
   if (!granted) {
@@ -35,8 +37,18 @@ export const sendUssd = async ({
     throw new Error("GsmModule not linked");
   }
 
+  // Load automatic USSD replies if available
+  if (
+    GsmModule.setUssdReplies &&
+    Array.isArray(replies) &&
+    replies.length > 0
+  ) {
+    await GsmModule.setUssdReplies(replies);
+  }
+
+  // Preferred method (SIM selection)
   if (GsmModule.sendUssdWithSim) {
-    return GsmModule.sendUssdWithSim(
+    return await GsmModule.sendUssdWithSim(
       ussdCode,
       reference,
       deviceId,
@@ -45,5 +57,11 @@ export const sendUssd = async ({
     );
   }
 
-  return GsmModule.sendUssd(ussdCode, reference, deviceId, secretKey);
+  // Fallback
+  return await GsmModule.sendUssd(
+    ussdCode,
+    reference,
+    deviceId,
+    secretKey
+  );
 };
