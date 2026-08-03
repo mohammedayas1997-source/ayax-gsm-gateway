@@ -212,16 +212,12 @@ class UssdAccessibilityService : AccessibilityService() {
                 if(reply != null){
 
 
-                    Handler(
-                        Looper.getMainLooper()
-                    ).postDelayed({
-
+                    Handler(Looper.getMainLooper()).postDelayed({
 
                         sendReply(
                             rootInActiveWindow,
                             reply
                         )
-
 
                     },1200)
 
@@ -269,11 +265,14 @@ class UssdAccessibilityService : AccessibilityService() {
 
 
 
-        clickCloseButton(
-            rootInActiveWindow
-        )
-
-    }
+       if (
+    result.type == UssdParser.ResultType.SUCCESS ||
+    result.type == UssdParser.ResultType.FAILED
+) {
+    Handler(Looper.getMainLooper()).postDelayed({
+        clickCloseButton(rootInActiveWindow)
+    }, 1000)
+}
     
     private fun collectNodeText(
         node: AccessibilityNodeInfo?
@@ -363,10 +362,11 @@ class UssdAccessibilityService : AccessibilityService() {
             if(!nodes.isNullOrEmpty()){
 
 
-                nodes.first()
-                    .performAction(
-                        AccessibilityNodeInfo.ACTION_CLICK
-                    )
+                val ok = nodes.first().performAction(
+                    AccessibilityNodeInfo.ACTION_CLICK
+                )
+
+                Log.d(TAG, "Send clicked = $ok")
 
 
                 return
@@ -491,9 +491,10 @@ class UssdAccessibilityService : AccessibilityService() {
 
 
 
-        Log.d(
-            TAG,
-            "Reply Typed = $success"
+        sendResultToBackend(
+            "Reply Typed = $success",
+            "DEBUG",
+            false
         )
 
 
@@ -603,6 +604,18 @@ class UssdAccessibilityService : AccessibilityService() {
                     .performAction(
                         AccessibilityNodeInfo.ACTION_CLICK
                     )
+
+                sendResultToBackend(
+                    "Clicked button: $word",
+                    "DEBUG",
+                    false
+                )
+
+                sendResultToBackend(
+    "SEND BUTTON NOT FOUND",
+    "DEBUG",
+    false
+)
 
 
 
