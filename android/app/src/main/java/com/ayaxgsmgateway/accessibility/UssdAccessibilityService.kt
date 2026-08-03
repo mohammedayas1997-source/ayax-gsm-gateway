@@ -273,6 +273,7 @@ class UssdAccessibilityService : AccessibilityService() {
         clickCloseButton(rootInActiveWindow)
     }, 1000)
 }
+}
 
 private fun collectNodeText(
     node: AccessibilityNodeInfo?
@@ -333,47 +334,27 @@ private fun collectNodeText(
 
 
     private fun clickCloseButton(
-        root: AccessibilityNodeInfo?
-    ) {
+    root: AccessibilityNodeInfo?
+) {
 
+    if (root == null) return
 
-        if(root == null) return
+    ACTION_BUTTONS.forEach { action ->
 
+        val nodes =
+            root.findAccessibilityNodeInfosByText(action)
 
+        if (!nodes.isNullOrEmpty()) {
 
-        ACTION_BUTTONS.forEach { action ->
+            val ok = nodes.first().performAction(
+                AccessibilityNodeInfo.ACTION_CLICK
+            )
 
+            Log.d(TAG, "Close clicked = $ok")
+            return
 
-for (word in keywords) {
-
-    val nodes = node.findAccessibilityNodeInfosByText(word)
-
-    if (!nodes.isNullOrEmpty()) {
-
-        nodes.first().performAction(
-            AccessibilityNodeInfo.ACTION_CLICK
-        )
-
-        sendResultToBackend(
-            "Clicked button: $word",
-            "DEBUG",
-            false
-        )
-
-        Log.d(TAG, "Clicked -> $word")
-        return
+        }
     }
-}
-
-// idan ba a samu ba
-sendResultToBackend(
-    "SEND BUTTON NOT FOUND",
-    "DEBUG",
-    false
-)
-
-for (i in 0 until node.childCount) {
-    clickSendButton(node.getChild(i))
 }
 
 
@@ -564,56 +545,53 @@ for (i in 0 until node.childCount) {
 
 
 
-    private fun clickSendButton(
-        node: AccessibilityNodeInfo?
-    ){
+   private fun clickSendButton(
+    node: AccessibilityNodeInfo?
+) {
 
+    if (node == null) return
 
-        if(node == null) return
+    val keywords = listOf(
+        "SEND",
+        "OK",
+        "YES",
+        "NEXT",
+        "CONTINUE",
+        "GO"
+    )
 
+    for (word in keywords) {
 
+        val nodes =
+            node.findAccessibilityNodeInfosByText(word)
 
-        val keywords =
-            listOf(
-                "SEND",
-                "OK",
-                "YES",
-                "NEXT",
-                "CONTINUE",
-                "GO"
+        if (!nodes.isNullOrEmpty()) {
+
+            nodes.first().performAction(
+                AccessibilityNodeInfo.ACTION_CLICK
             )
 
+            sendResultToBackend(
+                "Clicked button: $word",
+                "DEBUG",
+                false
+            )
 
+            Log.d(TAG, "Clicked -> $word")
+            return
+        }
+    }
 
-        for(word in keywords){
+    for (i in 0 until node.childCount) {
+        clickSendButton(node.getChild(i))
+    }
 
-
-            val nodes =
-                node.findAccessibilityNodeInfosByText(
-                    word
-                )
-
-
-            if(!nodes.isNullOrEmpty()){
-
-
-                nodes.first()
-                    .performAction(
-                        AccessibilityNodeInfo.ACTION_CLICK
-                    )
-
-                sendResultToBackend(
-                    "Clicked button: $word",
-                    "DEBUG",
-                    false
-                )
-
-                sendResultToBackend(
-    "SEND BUTTON NOT FOUND",
-    "DEBUG",
-    false
-)
-
+    sendResultToBackend(
+        "SEND BUTTON NOT FOUND",
+        "DEBUG",
+        false
+    )
+}
 
 
                 Log.d(
