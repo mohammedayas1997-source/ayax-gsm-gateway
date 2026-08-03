@@ -117,42 +117,55 @@ fun sendSmsWithSim(
         promise.reject("SMS_ERROR", e.message)
     }
 }
- {
-  try {
-    if (
-      reactContext.checkSelfPermission(Manifest.permission.CALL_PHONE)
-      != PackageManager.PERMISSION_GRANTED
-    ) {
-      promise.reject("PERMISSION_DENIED", "CALL_PHONE permission not granted")
-      return
+ @ReactMethod
+fun sendUssd(
+    ussdCode: String,
+    reference: String,
+    deviceId: String,
+    secretKey: String,
+    promise: Promise
+) {
+    try {
+
+        if (
+            reactContext.checkSelfPermission(Manifest.permission.CALL_PHONE)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            promise.reject("PERMISSION_DENIED", "CALL_PHONE permission not granted")
+            return
+        }
+
+        val prefs =
+            reactContext.getSharedPreferences(
+                "AYAX_USSD",
+                Context.MODE_PRIVATE
+            )
+
+        prefs.edit()
+            .putString("reference", reference)
+            .putString("deviceId", deviceId)
+            .putString("secretKey", secretKey)
+            .apply()
+
+        val encodedHash = Uri.encode("#")
+        val finalCode = ussdCode.replace("#", encodedHash)
+
+        val intent = Intent(Intent.ACTION_CALL)
+        intent.data = Uri.parse("tel:$finalCode")
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        reactContext.startActivity(intent)
+
+        val result = Arguments.createMap()
+        result.putBoolean("success", true)
+        result.putString("ussdCode", ussdCode)
+        result.putString("message", "USSD command started")
+
+        promise.resolve(result)
+
+    } catch (e: Exception) {
+        promise.reject("USSD_ERROR", e.message)
     }
-
-    val prefs = reactContext.getSharedPreferences("AYAX_USSD", Context.MODE_PRIVATE)
-
-    prefs.edit()
-      .putString("reference", reference)
-      .putString("deviceId", deviceId)
-      .putString("secretKey", secretKey)
-      .apply()
-
-    val encodedHash = Uri.encode("#")
-    val finalCode = ussdCode.replace("#", encodedHash)
-
-    val intent = Intent(Intent.ACTION_CALL)
-    intent.data = Uri.parse("tel:$finalCode")
-    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-
-    reactContext.startActivity(intent)
-
-    val result = Arguments.createMap()
-    result.putBoolean("success", true)
-    result.putString("ussdCode", ussdCode)
-    result.putString("message", "USSD command started")
-
-    promise.resolve(result)
-  } catch (e: Exception) {
-    promise.reject("USSD_ERROR", e.message)
-  }
 }
 @ReactMethod
 fun sendUssdWithSim(
