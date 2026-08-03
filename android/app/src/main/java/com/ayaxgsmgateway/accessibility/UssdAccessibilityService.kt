@@ -278,9 +278,7 @@ private fun collectNodeText(
     node: AccessibilityNodeInfo?
 ): String {
 
-    if (node == null) {
-        return ""
-    }
+    if (node == null) return ""
 
     val builder = StringBuilder()
 
@@ -294,13 +292,14 @@ private fun collectNodeText(
 
     for (i in 0 until node.childCount) {
         builder.append(
-            collectNodeText(node.getChild(i))
+            collectNodeText(
+                node.getChild(i)
+            )
         )
     }
 
     return builder.toString().trim()
 }
-
 
 
     private fun isOnlyActionButtonText(
@@ -345,34 +344,37 @@ private fun collectNodeText(
         ACTION_BUTTONS.forEach { action ->
 
 
-            val nodes =
-                root.findAccessibilityNodeInfosByText(
-                    action
-                )
+for (word in keywords) {
 
+    val nodes = node.findAccessibilityNodeInfosByText(word)
 
-            if(!nodes.isNullOrEmpty()){
+    if (!nodes.isNullOrEmpty()) {
 
+        nodes.first().performAction(
+            AccessibilityNodeInfo.ACTION_CLICK
+        )
 
-                nodes.first().performAction(
-    AccessibilityNodeInfo.ACTION_CLICK
-)
+        sendResultToBackend(
+            "Clicked button: $word",
+            "DEBUG",
+            false
+        )
 
+        Log.d(TAG, "Clicked -> $word")
+        return
+    }
+}
+
+// idan ba a samu ba
 sendResultToBackend(
-    "Clicked button: $word",
+    "SEND BUTTON NOT FOUND",
     "DEBUG",
     false
 )
 
-return
-
-            }
-
-        }
-
-    }
-
-
+for (i in 0 until node.childCount) {
+    clickSendButton(node.getChild(i))
+}
 
 
 
