@@ -1,7 +1,6 @@
 package com.ayaxgsmgateway.gsm.parser
 import kotlin.text.Regex
 
-
 object UssdParser {
 
     enum class ResultType {
@@ -22,30 +21,26 @@ object UssdParser {
 
         // ===== WAITING =====
 
-        if (
-            text.contains("reply with") ||
-            text.contains("reply") ||
-            text.contains("select") ||
-            text.contains("choose") ||
-            text.contains("enter") ||
-            text.contains("input") ||
-            text.contains("press") ||
-            text.contains("send") ||
-            text.contains("option") ||
-            text.contains("please wait") ||
-            text.contains("being processed") ||
-            text.contains("processing") ||
-            text.contains("loading") ||
-            text.contains("connecting")
-            Regex("""\n\s*1[\). ]""").find(text) != null
-        ) {
+if (
+    text.contains("reply with") ||
+    text.contains("reply") ||
+    text.contains("select") ||
+    text.contains("choose") ||
+    text.contains("enter") ||
+    text.contains("input") ||
+    text.contains("press") ||
+    text.contains("send") ||
+    text.contains("option") ||
+    text.contains("\n1.") ||
+    text.contains("\n1)") ||
+    text.contains("1.")
+) {
 
-            return ParsedResult(
-                ResultType.WAITING,
-                message
-            )
-
-        }
+    return ParsedResult(
+        ResultType.WAITING,
+        message
+    )
+}
 
         // ===== FAILED =====
 
@@ -70,7 +65,16 @@ object UssdParser {
         }
 
         if (
-    Regex("""(^|\n)\s*\d+[\).\-: ]""").containsMatchIn(text)
+    text.lines().any { line ->
+        val value = line.trim()
+
+        value.startsWith("1.") ||
+        value.startsWith("2.") ||
+        value.startsWith("3.") ||
+        value.startsWith("1)") ||
+        value.startsWith("2)") ||
+        value.startsWith("3)")
+    }
 ) {
 
     return ParsedResult(
