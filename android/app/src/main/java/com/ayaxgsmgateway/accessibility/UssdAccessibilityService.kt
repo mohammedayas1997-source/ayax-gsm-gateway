@@ -787,21 +787,20 @@ private fun clickSendButton(
                     override fun onFailure(
                         call: Call,
                         e: IOException
-                    ){
+                    ) {
 
                         Log.e(
-    TAG,
-    "Backend Error",
-    e
-)
+                            TAG,
+                            "Backend Error",
+                            e
+                        )
 
-
-
+                    }
 
                     override fun onResponse(
                         call: Call,
                         response: Response
-                    ){
+                    ) {
 
                         response.use {
 

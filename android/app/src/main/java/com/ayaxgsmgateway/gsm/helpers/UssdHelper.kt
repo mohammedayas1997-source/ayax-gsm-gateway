@@ -142,31 +142,32 @@ object UssdHelper {
                     }
 
                     override fun onReceiveUssdResponseFailed(
-                        telephonyManager: TelephonyManager?,
-                        request: String?,
-                        failureCode: Int
-                    ) {
+    telephonyManager: TelephonyManager?,
+    request: String?,
+    failureCode: Int
+) {
 
-                        if (failureCode == -1) {
+    Log.e(
+        TAG,
+        "USSD FAILED = $failureCode"
+    )
 
-                            openDialerFallback(
-                                context,
-                                ussdCode,
-                                subscriptionId,
-                                simSlot,
-                                onSuccess,
-                                onError
-                            )
+    if (failureCode == -1) {
 
-                            return
-                        }
+        openDialerFallback(
+            context,
+            ussdCode,
+            subscriptionId,
+            simSlot,
+            onSuccess,
+            onError
+        )
 
-                        onError("USSD failed: $failureCode")
-                    }
-                    Log.e(
-    TAG,
-    "USSD FAILED = $failureCode"
-)
+        return
+    }
+
+    onError("USSD failed: $failureCode")
+}
 
                 },
                 Handler(Looper.getMainLooper())
