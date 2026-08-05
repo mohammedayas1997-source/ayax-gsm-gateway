@@ -30,6 +30,11 @@ object UssdParser {
             text.contains("press") ||
             text.contains("send") ||
             text.contains("option") ||
+            text.contains("please wait") ||
+            text.contains("being processed") ||
+            text.contains("processing") ||
+            text.contains("loading") ||
+            text.contains("connecting")
             Regex("""\n\s*1[\). ]""").containsMatchIn(text)
         ) {
 
@@ -62,27 +67,40 @@ object UssdParser {
 
         }
 
+        if (
+    Regex("""(^|\n)\s*\d+[\).\-: ]""").containsMatchIn(text)
+) {
+
+    return ParsedResult(
+        ResultType.WAITING,
+        message
+    )
+
+}
+
         // ===== SUCCESS =====
 
-        if (
-            text.contains("successful") ||
-            text.contains("successfully") ||
-            text.contains("completed") ||
-            text.contains("approved") ||
-            text.contains("thank you") ||
-            text.contains("balance") ||
-            text.contains("account") ||
-            text.contains("dear customer") ||
-            text.contains("bundle") ||
-            text.contains("airtime")
-        ) {
+if (
 
-            return ParsedResult(
-                ResultType.SUCCESS,
-                message
-            )
+    text.contains("successful") ||
+    text.contains("successfully") ||
+    text.contains("completed") ||
+    text.contains("approved") ||
+    text.contains("thank you") ||
+    text.contains("dear customer") ||
+    text.contains("bundle") ||
+    text.contains("airtime balance") ||
+    text.contains("data balance") ||
+    text.contains("available balance")
 
-        }
+) {
+
+    return ParsedResult(
+        ResultType.SUCCESS,
+        message
+    )
+
+}
 
         return ParsedResult(
             ResultType.UNKNOWN,

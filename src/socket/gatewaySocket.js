@@ -206,7 +206,22 @@ const handleUssdCommand = async (command) => {
     ussdCode,
     reference: command.reference,
     simSlot,
-  });
+
+    simId:
+        command.simId,
+
+    balanceType:
+        command.balanceType,
+
+    service:
+        command.service,
+
+    network:
+        command.network,
+});
+
+  console.log("NATIVE RESULT");
+  console.log(JSON.stringify(result, null, 2));
 
   console.log("USSD native result:", result);
 
@@ -284,6 +299,10 @@ const handleCommand = async (command) => {
     command.type || ""
   ).toUpperCase();
 
+  console.log("COMMAND TYPE:", commandType);
+  console.log("REFERENCE:", command.reference);
+  console.log("PAYLOAD:", JSON.stringify(command.payload || {}));
+
   saveLog({
     type: commandType || "UNKNOWN",
     reference: command.reference,
@@ -317,6 +336,10 @@ const handleCommand = async (command) => {
 
       case "USSD":
       case "CHECK_BALANCE":
+      case "BUY_DATA":
+      case "BUY_AIRTIME":
+      case "AIRTIME":
+      case "DATA":
         await reportResult({
           reference: command.reference,
           status: "PROCESSING",
@@ -327,6 +350,9 @@ const handleCommand = async (command) => {
         });
 
         await handleUssdCommand(command);
+        console.log("USSD COMMAND STARTED");
+        console.log("USSD CODE:", ussdCode);
+        console.log("SIM SLOT:", simSlot);
         return;
 
       default:
@@ -424,10 +450,14 @@ export const connectGatewaySocket = async () => {
     queuedCommandHandler
   );
 
-  socket.on(
-    "gateway-command",
-    queuedCommandHandler
-  );
+  socket.on("gateway-command", async (command) => {
+  console.log("=================================");
+  console.log("GATEWAY COMMAND RECEIVED");
+  console.log(JSON.stringify(command, null, 2));
+  console.log("=================================");
+
+  queuedCommandHandler(command);
+});
 
   socket.on("disconnect", (reason) => {
     console.log(

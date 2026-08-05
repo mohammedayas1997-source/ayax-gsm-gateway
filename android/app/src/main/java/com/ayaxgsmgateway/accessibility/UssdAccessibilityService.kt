@@ -32,15 +32,17 @@ class UssdAccessibilityService : AccessibilityService() {
 
 
     private val client =
-        OkHttpClient.Builder()
-            .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
-            .writeTimeout(20, TimeUnit.SECONDS)
-            .build()
+    OkHttpClient.Builder()
+        .connectTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .writeTimeout(60, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .build()
 
 
     private var lastCapturedMessage = ""
     private var lastCapturedAt = 0L
+    private var lastBackendStatus = ""
 
 
 
@@ -253,6 +255,15 @@ class UssdAccessibilityService : AccessibilityService() {
                     "UNKNOWN"
 
             }
+
+        if (
+    message == lastCapturedMessage &&
+    backendStatus == lastBackendStatus
+) {
+    return
+}
+
+lastBackendStatus = backendStatus
 
 
 
@@ -482,7 +493,13 @@ private fun collectNodeText(
         ).postDelayed({
 
 
-            clickSendButton(root)
+          val clicked = clickSendButton(root)
+
+if (!clicked) {
+
+    Log.e(TAG, "SEND button not found")
+
+}
 
 
         },500)
@@ -547,9 +564,9 @@ private fun collectNodeText(
 
 private fun clickSendButton(
     node: AccessibilityNodeInfo?
-) {
+): Boolean {
 
-    if (node == null) return
+    if (node == null) return false
 
     val keywords = listOf(
         "SEND",
@@ -570,26 +587,31 @@ private fun clickSendButton(
                 AccessibilityNodeInfo.ACTION_CLICK
             )
 
+            Log.d(TAG, "Clicked -> $word")
+
             sendResultToBackend(
                 "Clicked button: $word",
                 "DEBUG",
                 false
             )
 
-            Log.d(TAG, "Clicked -> $word")
-            return
+            return true
         }
     }
 
     for (i in 0 until node.childCount) {
-        clickSendButton(node.getChild(i))
+
+        if (
+            clickSendButton(
+                node.getChild(i)
+            )
+        ) {
+            return true
+        }
+
     }
 
-    sendResultToBackend(
-        "SEND BUTTON NOT FOUND",
-        "DEBUG",
-        false
-    )
+    return false
 }
 
 
@@ -716,6 +738,25 @@ private fun clickSendButton(
             "requestType",
             requestType
         )
+        json.put(
+            "simId",
+            prefs.getString("simId", "")
+        )
+
+        json.put(
+            "balanceType",
+            prefs.getString("balanceType", "")
+        )
+
+        json.put(
+            "service",
+            prefs.getString("service", "")
+        )
+
+        json.put(
+            "network",
+            prefs.getString("network", "")
+        )
 
 
 
@@ -749,11 +790,10 @@ private fun clickSendButton(
                     ){
 
                         Log.e(
-                            TAG,
-                            e.message ?: ""
-                        )
-
-                    }
+    TAG,
+    "Backend Error",
+    e
+)
 
 
 
@@ -764,6 +804,15 @@ private fun clickSendButton(
                     ){
 
                         response.use {
+
+                            if (!it.isSuccessful) {
+
+                                Log.e(
+                                    TAG,
+                                    "Backend Response = ${it.code}"
+                                )
+
+                            }
 
 
                             if(

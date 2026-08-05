@@ -10,35 +10,33 @@ object UssdReplyManager {
 
         if (flow.isBlank()) return
 
-        flow.split(",")
-
+        flow
+            .split(",")
             .map { it.trim() }
-
             .filter { it.isNotBlank() }
-
             .forEach {
-
                 replies.add(it)
-
             }
     }
 
     fun hasNext(): Boolean {
-
         return replies.isNotEmpty()
-
     }
 
-    fun next(): String {
+    fun next(): String? {
+
+        if (replies.isEmpty()) {
+            return null
+        }
 
         return replies.removeAt(0)
+    }
 
+    fun size(): Int {
+        return replies.size
     }
 
     fun clear() {
-
         replies.clear()
-
     }
-
 }

@@ -141,12 +141,6 @@ fun sendUssd(
                 Context.MODE_PRIVATE
             )
 
-        prefs.edit()
-            .putString("reference", reference)
-            .putString("deviceId", deviceId)
-            .putString("secretKey", secretKey)
-            .apply()
-
         val encodedHash = Uri.encode("#")
         val finalCode = ussdCode.replace("#", encodedHash)
 
@@ -174,6 +168,10 @@ fun sendUssdWithSim(
     deviceId: String,
     secretKey: String,
     simSlot: Int,
+    simId: String,
+    balanceType: String,
+    service: String,
+    network: String,
     promise: Promise
 ) {
 
@@ -185,14 +183,19 @@ fun sendUssdWithSim(
                 Context.MODE_PRIVATE
             )
 
-        prefs.edit()
-            .putString("reference", reference)
-            .putString("deviceId", deviceId)
-            .putString("secretKey", secretKey)
-            .apply()
-
         android.util.Log.d("AYAX_TEST", "USSD=$ussdCode")
         android.util.Log.d("AYAX_TEST", "SIM=$simSlot")
+
+        prefs.edit()
+    .putString("reference", reference)
+    .putString("deviceId", deviceId)
+    .putString("secretKey", secretKey)
+    .putInt("simSlot", simSlot)
+    .putString("simId", simId)
+    .putString("balanceType", balanceType)
+    .putString("service", service)
+    .putString("network", network)
+    .apply()
 
         UssdHelper.sendUssd(
 

@@ -163,6 +163,10 @@ object UssdHelper {
 
                         onError("USSD failed: $failureCode")
                     }
+                    Log.e(
+    TAG,
+    "USSD FAILED = $failureCode"
+)
 
                 },
                 Handler(Looper.getMainLooper())
