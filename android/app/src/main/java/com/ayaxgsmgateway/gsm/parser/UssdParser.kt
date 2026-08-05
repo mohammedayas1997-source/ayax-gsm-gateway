@@ -1,4 +1,6 @@
 package com.ayaxgsmgateway.gsm.parser
+import kotlin.text.Regex
+
 
 object UssdParser {
 
@@ -35,7 +37,7 @@ object UssdParser {
             text.contains("processing") ||
             text.contains("loading") ||
             text.contains("connecting")
-            Regex("""\n\s*1[\). ]""").containsMatchIn(text)
+            Regex("""\n\s*1[\). ]""").find(text) != null
         ) {
 
             return ParsedResult(
