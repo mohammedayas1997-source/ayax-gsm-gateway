@@ -19,13 +19,15 @@ object UssdHelper {
     private const val PREFS_NAME = "AYAX_USSD"
 
     fun sendUssd(
-        Log.d(TAG, "sendUssd() called")
+
         context: Context,
         ussdCode: String,
         simSlot: Int,
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
+
+        Log.d(TAG, "sendUssd() called")
 
         Log.e(TAG, "============== SEND USSD START ==============")
         Log.e(TAG, "USSD = $ussdCode")
