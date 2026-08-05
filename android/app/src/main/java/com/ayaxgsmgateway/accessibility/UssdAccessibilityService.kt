@@ -721,11 +721,15 @@ private fun clickSendButton(
 
 
         val body =
-            json.toString()
-                .toRequestBody(
-                    JSON_MEDIA_TYPE
-                )
+    json.toString()
+        .toRequestBody(
+            JSON_MEDIA_TYPE
+        )
 
+Log.d(
+    TAG,
+    "POSTING RESULT => ${json}"
+)
 
 
         val request =
@@ -733,6 +737,13 @@ private fun clickSendButton(
                 .url(RESULT_URL)
                 .post(body)
                 .build()
+        
+
+        Log.d(TAG, "=================================")
+        Log.d(TAG, "Sending Result To Backend")
+        Log.d(TAG, "URL = $RESULT_URL")
+        Log.d(TAG, json.toString())
+        Log.d(TAG, "=================================")
 
 
 
@@ -748,43 +759,28 @@ private fun clickSendButton(
                         e: IOException
                     ){
 
-                        Log.e(
-                            TAG,
-                            e.message ?: ""
-                        )
-
-                    }
+                        Log.e(TAG, "FAILED")
+Log.e(TAG, e.toString())
+e.printStackTrace()
 
 
 
 
-                    override fun onResponse(
-                        call: Call,
-                        response: Response
-                    ){
+                   override fun onResponse(
+    call: Call,
+    response: Response
+) {
+    val body = response.body?.string()
 
-                        response.use {
+    Log.d(TAG, "HTTP = ${response.code}")
+    Log.d(TAG, "BODY = $body")
 
-
-                            if(
-                                it.isSuccessful &&
-                                clearPendingRequest
-                            ){
-
-                                clearPendingRequest(
-                                    prefs
-                                )
-
-                            }
-
-                        }
-
-                    }
-
-                }
-            )
-
+    if (response.isSuccessful && clearPendingRequest) {
+        clearPendingRequest(prefs)
     }
+
+    response.close()
+}
 
 
 
