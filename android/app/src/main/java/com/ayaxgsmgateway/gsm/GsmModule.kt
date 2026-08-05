@@ -191,6 +191,9 @@ fun sendUssdWithSim(
             .putString("secretKey", secretKey)
             .apply()
 
+        android.util.Log.d("AYAX_TEST", "USSD=$ussdCode")
+        android.util.Log.d("AYAX_TEST", "SIM=$simSlot")
+
         UssdHelper.sendUssd(
 
             reactContext,

@@ -19,6 +19,7 @@ object UssdHelper {
     private const val PREFS_NAME = "AYAX_USSD"
 
     fun sendUssd(
+        Log.d(TAG, "sendUssd() called")
         context: Context,
         ussdCode: String,
         simSlot: Int,
@@ -231,6 +232,7 @@ object UssdHelper {
                         )
                     }
                 }
+            Log.d(TAG, "Launching ACTION_CALL")
 
             context.startActivity(intent)
 

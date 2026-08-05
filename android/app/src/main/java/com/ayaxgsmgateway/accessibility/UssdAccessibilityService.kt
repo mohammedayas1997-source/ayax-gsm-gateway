@@ -721,15 +721,11 @@ private fun clickSendButton(
 
 
         val body =
-    json.toString()
-        .toRequestBody(
-            JSON_MEDIA_TYPE
-        )
+            json.toString()
+                .toRequestBody(
+                    JSON_MEDIA_TYPE
+                )
 
-Log.d(
-    TAG,
-    "POSTING RESULT => ${json}"
-)
 
 
         val request =
@@ -737,13 +733,6 @@ Log.d(
                 .url(RESULT_URL)
                 .post(body)
                 .build()
-        
-
-        Log.d(TAG, "=================================")
-        Log.d(TAG, "Sending Result To Backend")
-        Log.d(TAG, "URL = $RESULT_URL")
-        Log.d(TAG, json.toString())
-        Log.d(TAG, "=================================")
 
 
 
@@ -759,28 +748,43 @@ Log.d(
                         e: IOException
                     ){
 
-                        Log.e(TAG, "FAILED")
-Log.e(TAG, e.toString())
-e.printStackTrace()
+                        Log.e(
+                            TAG,
+                            e.message ?: ""
+                        )
+
+                    }
 
 
 
 
-                   override fun onResponse(
-    call: Call,
-    response: Response
-) {
-    val body = response.body?.string()
+                    override fun onResponse(
+                        call: Call,
+                        response: Response
+                    ){
 
-    Log.d(TAG, "HTTP = ${response.code}")
-    Log.d(TAG, "BODY = $body")
+                        response.use {
 
-    if (response.isSuccessful && clearPendingRequest) {
-        clearPendingRequest(prefs)
+
+                            if(
+                                it.isSuccessful &&
+                                clearPendingRequest
+                            ){
+
+                                clearPendingRequest(
+                                    prefs
+                                )
+
+                            }
+
+                        }
+
+                    }
+
+                }
+            )
+
     }
-
-    response.close()
-}
 
 
 
