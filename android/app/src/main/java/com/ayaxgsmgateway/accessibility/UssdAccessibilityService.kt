@@ -116,6 +116,8 @@ class UssdAccessibilityService : AccessibilityService() {
 
             }.trim()
 
+            Log.e(TAG, "STEP 1")
+
 
 
         if (message.isBlank()) {
@@ -159,6 +161,8 @@ class UssdAccessibilityService : AccessibilityService() {
         val result =
             UssdParser.parse(message)
 
+            Log.e(TAG, "STEP 2 = ${result.type}")
+
 
 
         when(result.type){
@@ -191,6 +195,7 @@ class UssdAccessibilityService : AccessibilityService() {
             else -> {}
 
         }
+        Log.e(TAG, "STEP 3")
 
 
 
@@ -266,6 +271,8 @@ class UssdAccessibilityService : AccessibilityService() {
 lastBackendStatus = backendStatus
 
 
+        Log.e(TAG, "STEP 4")
+
 
         sendResultToBackend(
             message,
@@ -273,6 +280,7 @@ lastBackendStatus = backendStatus
             backendStatus == "SUCCESSFUL" ||
                     backendStatus == "FAILED"
         )
+        Log.e(TAG, "STEP 5")
 
 
 
@@ -777,6 +785,8 @@ private fun clickSendButton(
 
 
 
+        Log.e(TAG, "STEP 6")
+
 
         client.newCall(request)
             .enqueue(
@@ -789,6 +799,9 @@ private fun clickSendButton(
                         e: IOException
                     ) {
 
+                        Log.e(TAG, "STEP 7")
+
+
                         Log.e(
                             TAG,
                             "Backend Error",
@@ -798,34 +811,22 @@ private fun clickSendButton(
                     }
 
                     override fun onResponse(
-                        call: Call,
-                        response: Response
-                    ) {
+    call: Call,
+    response: Response
+) {
 
-                        response.use {
+    Log.e(TAG, "STEP 8")
 
-                            if (!it.isSuccessful) {
+    response.use {
 
-                                Log.e(
-                                    TAG,
-                                    "Backend Response = ${it.code}"
-                                )
+        Log.e(TAG, "Backend Code = ${it.code}")
+        Log.e(TAG, it.body?.string().orEmpty())
 
-                            }
-
-
-                            if(
-                                it.isSuccessful &&
-                                clearPendingRequest
-                            ){
-
-                                clearPendingRequest(
-                                    prefs
-                                )
-
-                            }
-
-                        }
+        if (it.isSuccessful && clearPendingRequest) {
+            clearPendingRequest(prefs)
+        }
+    }
+}
 
                     }
 
