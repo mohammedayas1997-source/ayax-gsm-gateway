@@ -137,12 +137,12 @@ class UssdAccessibilityService : AccessibilityService() {
 
 
 
-        if (
-            message == lastCapturedMessage &&
-            now - lastCapturedAt < DUPLICATE_WINDOW_MS
-        ) {
-            return
-        }
+       if (
+    backendStatus == lastBackendStatus &&
+    backendStatus != "PROCESSING"
+) {
+    return
+}
 
 
 
