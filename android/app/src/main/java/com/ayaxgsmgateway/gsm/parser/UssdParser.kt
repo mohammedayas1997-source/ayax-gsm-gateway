@@ -1,5 +1,4 @@
 package com.ayaxgsmgateway.gsm.parser
-import kotlin.text.Regex
 
 object UssdParser {
 
@@ -15,35 +14,20 @@ object UssdParser {
         val message: String
     )
 
+    // Matches a genuine numbered menu line, e.g. "1. Buy Data" or "2) Borrow"
+    // — anchored to the start of a line so it doesn't false-match things like
+    // "1.2GB" or "N1.50" appearing mid-sentence in a balance/success message.
+    private val MENU_LINE_REGEX = Regex("(?m)^\\s*\\d+[.)]\\s")
+
     fun parse(message: String): ParsedResult {
 
         val text = message.lowercase().trim()
 
-        // ===== WAITING =====
-
-if (
-    text.contains("reply with") ||
-    text.contains("reply") ||
-    text.contains("select") ||
-    text.contains("choose") ||
-    text.contains("enter") ||
-    text.contains("input") ||
-    text.contains("press") ||
-    text.contains("send") ||
-    text.contains("option") ||
-    text.contains("\n1.") ||
-    text.contains("\n1)") ||
-    text.contains("1.")
-) {
-
-    return ParsedResult(
-        ResultType.WAITING,
-        message
-    )
-}
-
         // ===== FAILED =====
-
+        // Checked first: these are specific, decisive keywords. A menu-ish
+        // word like "select" or "option" appearing alongside one of these
+        // (e.g. "Invalid PIN, select 1 to retry") should still end the
+        // session as FAILED, not be misread as WAITING.
         if (
             text.contains("failed") ||
             text.contains("failure") ||
@@ -56,62 +40,50 @@ if (
             text.contains("expired") ||
             text.contains("cancelled")
         ) {
-
-            return ParsedResult(
-                ResultType.FAILED,
-                message
-            )
-
+            return ParsedResult(ResultType.FAILED, message)
         }
 
-        if (
-    text.lines().any { line ->
-        val value = line.trim()
-
-        value.startsWith("1.") ||
-        value.startsWith("2.") ||
-        value.startsWith("3.") ||
-        value.startsWith("1)") ||
-        value.startsWith("2)") ||
-        value.startsWith("3)")
-    }
-) {
-
-    return ParsedResult(
-        ResultType.WAITING,
-        message
-    )
-
-}
-
         // ===== SUCCESS =====
+        // Also checked before WAITING for the same reason — a final balance
+        // message like "Data balance: 1.2GB. Thank you." must not be
+        // swallowed by the broad WAITING keyword/number matching below.
+        if (
+            text.contains("successful") ||
+            text.contains("successfully") ||
+            text.contains("completed") ||
+            text.contains("approved") ||
+            text.contains("thank you") ||
+            text.contains("dear customer") ||
+            text.contains("bundle") ||
+            text.contains("airtime balance") ||
+            text.contains("data balance") ||
+            text.contains("available balance")
+        ) {
+            return ParsedResult(ResultType.SUCCESS, message)
+        }
 
-if (
+        // ===== WAITING =====
+        // Only reached once the message didn't match a decisive FAILED or
+        // SUCCESS pattern. Combines the keyword check with the precise
+        // numbered-menu-line regex (previously duplicated as two separate
+        // "WAITING" blocks — merged here into one).
+        val hasMenuLine = MENU_LINE_REGEX.containsMatchIn(message)
 
-    text.contains("successful") ||
-    text.contains("successfully") ||
-    text.contains("completed") ||
-    text.contains("approved") ||
-    text.contains("thank you") ||
-    text.contains("dear customer") ||
-    text.contains("bundle") ||
-    text.contains("airtime balance") ||
-    text.contains("data balance") ||
-    text.contains("available balance")
+        if (
+            hasMenuLine ||
+            text.contains("reply with") ||
+            text.contains("reply") ||
+            text.contains("select") ||
+            text.contains("choose") ||
+            text.contains("enter") ||
+            text.contains("input") ||
+            text.contains("press") ||
+            text.contains("send") ||
+            text.contains("option")
+        ) {
+            return ParsedResult(ResultType.WAITING, message)
+        }
 
-) {
-
-    return ParsedResult(
-        ResultType.SUCCESS,
-        message
-    )
-
-}
-
-        return ParsedResult(
-            ResultType.UNKNOWN,
-            message
-        )
+        return ParsedResult(ResultType.UNKNOWN, message)
     }
-
 }

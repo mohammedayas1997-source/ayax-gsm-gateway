@@ -8,6 +8,7 @@ import com.facebook.react.bridge.*
 import android.telephony.SmsManager
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import com.ayaxgsmgateway.gsm.helpers.SmsHelper
 import com.ayaxgsmgateway.gsm.helpers.UssdHelper
 import com.ayaxgsmgateway.gsm.manager.UssdReplyManager
@@ -20,72 +21,61 @@ class GsmModule(private val reactContext: ReactApplicationContext) :
   }
 
   @ReactMethod
-fun sendSms(phoneNumber: String, message: String, promise: Promise) {
-  try {
-    if (
-      reactContext.checkSelfPermission(Manifest.permission.SEND_SMS)
-      != PackageManager.PERMISSION_GRANTED
-    ) {
-      promise.reject("PERMISSION_DENIED", "SEND_SMS permission not granted")
-      return
+  fun sendSms(phoneNumber: String, message: String, promise: Promise) {
+    try {
+      if (
+        reactContext.checkSelfPermission(Manifest.permission.SEND_SMS)
+        != PackageManager.PERMISSION_GRANTED
+      ) {
+        promise.reject("PERMISSION_DENIED", "SEND_SMS permission not granted")
+        return
+      }
+
+      val smsManager = SmsManager.getDefault()
+
+      val parts = smsManager.divideMessage(message)
+
+      smsManager.sendMultipartTextMessage(
+        phoneNumber,
+        null,
+        parts,
+        null,
+        null
+      )
+
+      val result = Arguments.createMap()
+      result.putBoolean("success", true)
+      result.putString("phoneNumber", phoneNumber)
+      result.putString("message", message)
+
+      promise.resolve(result)
+    } catch (e: Exception) {
+      promise.reject("SMS_ERROR", e.message)
     }
-
-    val smsManager = SmsManager.getDefault()
-
-    val parts = smsManager.divideMessage(message)
-
-    smsManager.sendMultipartTextMessage(
-      phoneNumber,
-      null,
-      parts,
-      null,
-      null
-    )
-
-    val result = Arguments.createMap()
-    result.putBoolean("success", true)
-    result.putString("phoneNumber", phoneNumber)
-    result.putString("message", message)
-
-    promise.resolve(result)
-  } catch (e: Exception) {
-    promise.reject("SMS_ERROR", e.message)
   }
-}
 
-@ReactMethod
-fun setUssdReplies(
+  @ReactMethod
+  fun setUssdReplies(
     replies: ReadableArray,
     promise: Promise
-) {
-
+  ) {
     try {
 
-        com.ayaxgsmgateway.gsm.manager.UssdReplyManager.clear()
+      UssdReplyManager.clear()
 
-        for (i in 0 until replies.size()) {
+      for (i in 0 until replies.size()) {
+        UssdReplyManager.add(replies.getString(i) ?: "")
+      }
 
-            com.ayaxgsmgateway.gsm.manager.UssdReplyManager.add(
-                replies.getString(i) ?: ""
-            )
-
-        }
-
-        promise.resolve(true)
+      promise.resolve(true)
 
     } catch (e: Exception) {
-
-        promise.reject(
-            "USSD_REPLY_ERROR",
-            e.message
-        )
-
+      promise.reject("USSD_REPLY_ERROR", e.message)
     }
+  }
 
-}
-
-@ReactMethod
-fun sendSmsWithSim(
+  @ReactMethod
+  fun sendSmsWithSim(
     phoneNumber: String,
     message: String,
     simSlot: Int,
@@ -93,76 +83,85 @@ fun sendSmsWithSim(
     deviceId: String,
     secretKey: String,
     promise: Promise
-) {
+  ) {
     try {
-        SmsHelper.sendSms(
-            reactContext,
-            phoneNumber,
-            message,
-            simSlot,
-            reference,
-            deviceId,
-            secretKey
-        )
+      SmsHelper.sendSms(
+        reactContext,
+        phoneNumber,
+        message,
+        simSlot,
+        reference,
+        deviceId,
+        secretKey
+      )
 
-        val result = Arguments.createMap()
-        result.putBoolean("success", true)
-        result.putString("phoneNumber", phoneNumber)
-        result.putString("message", message)
-        result.putInt("simSlot", simSlot)
-        result.putString("reference", reference)
+      val result = Arguments.createMap()
+      result.putBoolean("success", true)
+      result.putString("phoneNumber", phoneNumber)
+      result.putString("message", message)
+      result.putInt("simSlot", simSlot)
+      result.putString("reference", reference)
 
-        promise.resolve(result)
+      promise.resolve(result)
     } catch (e: Exception) {
-        promise.reject("SMS_ERROR", e.message)
+      promise.reject("SMS_ERROR", e.message)
     }
-}
- @ReactMethod
-fun sendUssd(
+  }
+
+  @ReactMethod
+  fun sendUssd(
     ussdCode: String,
     reference: String,
     deviceId: String,
     secretKey: String,
     promise: Promise
-) {
+  ) {
     try {
 
-        if (
-            reactContext.checkSelfPermission(Manifest.permission.CALL_PHONE)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            promise.reject("PERMISSION_DENIED", "CALL_PHONE permission not granted")
-            return
-        }
+      if (
+        reactContext.checkSelfPermission(Manifest.permission.CALL_PHONE)
+        != PackageManager.PERMISSION_GRANTED
+      ) {
+        promise.reject("PERMISSION_DENIED", "CALL_PHONE permission not granted")
+        return
+      }
 
-        val prefs =
-            reactContext.getSharedPreferences(
-                "AYAX_USSD",
-                Context.MODE_PRIVATE
-            )
+      val prefs = reactContext.getSharedPreferences(PREFS_USSD, Context.MODE_PRIVATE)
 
-        val encodedHash = Uri.encode("#")
-        val finalCode = ussdCode.replace("#", encodedHash)
+      // Previously missing: without this, UssdAccessibilityService finds no
+      // "reference" in prefs and silently returns on every accessibility
+      // event, so nothing captured for a plain sendUssd() call ever reached
+      // the backend. Saved the same way sendUssdWithSim() already does it.
+      prefs.edit()
+        .putString("reference", reference)
+        .putString("deviceId", deviceId)
+        .putString("secretKey", secretKey)
+        .putInt("simSlot", DEFAULT_SIM_SLOT)
+        .apply()
 
-        val intent = Intent(Intent.ACTION_CALL)
-        intent.data = Uri.parse("tel:$finalCode")
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      val encodedHash = Uri.encode("#")
+      val finalCode = ussdCode.replace("#", encodedHash)
 
-        reactContext.startActivity(intent)
+      val intent = Intent(Intent.ACTION_CALL)
+      intent.data = Uri.parse("tel:$finalCode")
+      intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
-        val result = Arguments.createMap()
-        result.putBoolean("success", true)
-        result.putString("ussdCode", ussdCode)
-        result.putString("message", "USSD command started")
+      reactContext.startActivity(intent)
 
-        promise.resolve(result)
+      val result = Arguments.createMap()
+      result.putBoolean("success", true)
+      result.putString("ussdCode", ussdCode)
+      result.putString("message", "USSD command started")
+
+      promise.resolve(result)
 
     } catch (e: Exception) {
-        promise.reject("USSD_ERROR", e.message)
+      promise.reject("USSD_ERROR", e.message)
     }
-}
-@ReactMethod
-fun sendUssdWithSim(
+  }
+
+  @ReactMethod
+  fun sendUssdWithSim(
     ussdCode: String,
     reference: String,
     deviceId: String,
@@ -173,88 +172,78 @@ fun sendUssdWithSim(
     service: String,
     network: String,
     promise: Promise
-) {
+  ) {
 
     try {
 
-        val prefs =
-            reactContext.getSharedPreferences(
-                "AYAX_USSD",
-                Context.MODE_PRIVATE
-            )
+      val prefs = reactContext.getSharedPreferences(PREFS_USSD, Context.MODE_PRIVATE)
 
-        android.util.Log.d("AYAX_TEST", "USSD=$ussdCode")
-        android.util.Log.d("AYAX_TEST", "SIM=$simSlot")
+      Log.d(TAG, "USSD=$ussdCode")
+      Log.d(TAG, "SIM=$simSlot")
 
-        prefs.edit()
-    .putString("reference", reference)
-    .putString("deviceId", deviceId)
-    .putString("secretKey", secretKey)
-    .putInt("simSlot", simSlot)
-    .putString("simId", simId)
-    .putString("balanceType", balanceType)
-    .putString("service", service)
-    .putString("network", network)
-    .apply()
+      prefs.edit()
+        .putString("reference", reference)
+        .putString("deviceId", deviceId)
+        .putString("secretKey", secretKey)
+        .putInt("simSlot", simSlot)
+        .putString("simId", simId)
+        .putString("balanceType", balanceType)
+        .putString("service", service)
+        .putString("network", network)
+        .apply()
 
-        UssdHelper.sendUssd(
+      UssdHelper.sendUssd(
 
-            reactContext,
+        reactContext,
 
-            ussdCode,
+        ussdCode,
 
-            simSlot,
+        simSlot,
 
-            { response ->
+        { response ->
 
-                val map = Arguments.createMap()
+          val map = Arguments.createMap()
 
-                map.putBoolean("success", true)
-                map.putString("response", response)
-                map.putString("reference", reference)
-                map.putInt("simSlot", simSlot)
+          map.putBoolean("success", true)
+          map.putString("response", response)
+          map.putString("reference", reference)
+          map.putInt("simSlot", simSlot)
 
-                promise.resolve(map)
+          promise.resolve(map)
 
-            },
+        },
 
-            { error ->
+        { error ->
 
-                promise.reject(
-                    "USSD_ERROR",
-                    error
-                )
+          promise.reject("USSD_ERROR", error)
 
-            }
+        }
 
-        )
+      )
 
     } catch (e: Exception) {
 
-        promise.reject(
-            "USSD_ERROR",
-            e.message
-        )
+      promise.reject("USSD_ERROR", e.message)
 
     }
 
-}
-
-@ReactMethod
-fun saveDeviceCredentials(deviceId: String, secretKey: String, promise: Promise) {
-  try {
-    val prefs = reactContext.getSharedPreferences("AYAX_DEVICE", Context.MODE_PRIVATE)
-
-    prefs.edit()
-      .putString("deviceId", deviceId)
-      .putString("secretKey", secretKey)
-      .apply()
-
-    promise.resolve(true)
-  } catch (e: Exception) {
-    promise.reject("SAVE_DEVICE_ERROR", e.message)
   }
-}
+
+  @ReactMethod
+  fun saveDeviceCredentials(deviceId: String, secretKey: String, promise: Promise) {
+    try {
+      val prefs = reactContext.getSharedPreferences(PREFS_DEVICE, Context.MODE_PRIVATE)
+
+      prefs.edit()
+        .putString("deviceId", deviceId)
+        .putString("secretKey", secretKey)
+        .apply()
+
+      promise.resolve(true)
+    } catch (e: Exception) {
+      promise.reject("SAVE_DEVICE_ERROR", e.message)
+    }
+  }
 
   @ReactMethod
   fun getSimInfo(promise: Promise) {
@@ -296,5 +285,12 @@ fun saveDeviceCredentials(deviceId: String, secretKey: String, promise: Promise)
     } catch (e: Exception) {
       promise.reject("GSM_ERROR", e.message)
     }
+  }
+
+  companion object {
+    private const val TAG = "AYAX_TEST"
+    private const val PREFS_USSD = "AYAX_USSD"
+    private const val PREFS_DEVICE = "AYAX_DEVICE"
+    private const val DEFAULT_SIM_SLOT = 0
   }
 }

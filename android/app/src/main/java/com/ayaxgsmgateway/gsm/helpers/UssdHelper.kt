@@ -13,6 +13,9 @@ import android.telecom.TelecomManager
 import android.telephony.TelephonyManager
 import android.util.Log
 
+import com.ayaxgsmgateway.gsm.manager.UssdSessionManager
+import com.ayaxgsmgateway.gsm.model.SessionState
+
 object UssdHelper {
 
     private const val TAG = "AYAX_USSD"
@@ -55,6 +58,13 @@ object UssdHelper {
                 )
 
             savePendingMetadata(
+                context,
+                ussdCode,
+                simSlot,
+                subscriptionId
+            )
+
+            startSessionTracking(
                 context,
                 ussdCode,
                 simSlot,
@@ -198,12 +208,10 @@ object UssdHelper {
 
         try {
 
-            savePendingMetadata(
-                context,
-                ussdCode,
-                simSlot,
-                subscriptionId
-            )
+            // Note: metadata + session tracking are already saved by the
+            // sendUssd() call that dispatched here (either directly, or via
+            // sendWithCallback()'s failure/exception paths) — re-saving here
+            // was a redundant duplicate of that same work.
 
             val encoded =
                 ussdCode.replace("#", Uri.encode("#"))
@@ -277,6 +285,45 @@ object UssdHelper {
                 System.currentTimeMillis()
             )
             .apply()
+    }
+
+    /**
+     * Wires up UssdSessionManager, which previously had no caller anywhere
+     * in the project — startSession() was never invoked, so currentSession
+     * stayed null and every success()/failed()/waiting()/timeout() call
+     * from UssdAccessibilityService was a silent no-op. The reference is
+     * read back from prefs because GsmModule already writes it there
+     * (from both sendUssd() and sendUssdWithSim()) before calling here.
+     */
+    private fun startSessionTracking(
+        context: Context,
+        ussdCode: String,
+        simSlot: Int,
+        subscriptionId: Int
+    ) {
+
+        val prefs =
+            context.getSharedPreferences(
+                PREFS_NAME,
+                Context.MODE_PRIVATE
+            )
+
+        val reference = prefs.getString("reference", null)
+
+        if (reference.isNullOrBlank()) {
+            Log.e(TAG, "startSessionTracking: no reference in prefs, skipping")
+            return
+        }
+
+        UssdSessionManager.startSession(
+            SessionState(
+                reference = reference,
+                ussdCode = ussdCode,
+                simSlot = simSlot,
+                subscriptionId = subscriptionId,
+                requestType = detectRequestType(ussdCode)
+            )
+        )
     }
 
     private fun detectRequestType(
