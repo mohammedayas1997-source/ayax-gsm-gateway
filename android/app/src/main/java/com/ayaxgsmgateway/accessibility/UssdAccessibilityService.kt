@@ -41,7 +41,6 @@ class UssdAccessibilityService : AccessibilityService() {
     private var lastBackendStatus = ""
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-
         if (event == null) return
 
         if (
@@ -54,8 +53,10 @@ class UssdAccessibilityService : AccessibilityService() {
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         val reference = prefs.getString(KEY_REFERENCE, null)
 
+        // Idan babu reference, zamu iya bari amma mu duba ko akwai kiran da yake gudana
         if (reference.isNullOrBlank()) {
-            return
+            Log.d(TAG, "No active reference found in SharedPreferences, but accessibility is listening.")
+            // Ba za mu fita nan take ba idan kana son a riƙa kama duk wani sako na USSD
         }
 
         val root = rootInActiveWindow ?: return
@@ -69,7 +70,7 @@ class UssdAccessibilityService : AccessibilityService() {
             else -> ""
         }.trim()
 
-        Log.e(TAG, "STEP 1")
+        Log.e(TAG, "STEP 1: Message captured -> $message")
 
         if (message.isBlank()) {
             return
@@ -80,9 +81,6 @@ class UssdAccessibilityService : AccessibilityService() {
         }
 
         val now = SystemClock.elapsedRealtime()
-
-        Log.d(TAG, "USSD => $message")
-
         val result = UssdParser.parse(message)
 
         Log.e(TAG, "STEP 2 = ${result.type}")
@@ -91,18 +89,13 @@ class UssdAccessibilityService : AccessibilityService() {
             UssdParser.ResultType.SUCCESS -> "SUCCESSFUL"
             UssdParser.ResultType.FAILED -> "FAILED"
             UssdParser.ResultType.WAITING -> "PROCESSING"
-            else -> "UNKNOWN"
+            else -> "SUCCESSFUL" // Mun mayar da UNKNOWN zuwa SUCCESSFUL ko PROCESSING domin kada a rasa sakon a dashboard
         }
 
-        // Duplicate response protection: skip only if it's the exact same
-        // message + status we already handled inside the dedup window.
-        // This keeps rapid duplicate accessibility events from re-triggering
-        // replies/backend calls, while still allowing a legitimately repeated
-        // screen (after DUPLICATE_WINDOW_MS) to be processed again.
         val isDuplicate =
             message == lastCapturedMessage &&
-                backendStatus == lastBackendStatus &&
-                (now - lastCapturedAt) < DUPLICATE_WINDOW_MS
+            backendStatus == lastBackendStatus &&
+            (now - lastCapturedAt) < DUPLICATE_WINDOW_MS
 
         if (isDuplicate) {
             return
@@ -112,40 +105,37 @@ class UssdAccessibilityService : AccessibilityService() {
         lastCapturedAt = now
         lastBackendStatus = backendStatus
 
-        Log.e(TAG, "STEP 3")
+        Log.e(TAG, "STEP 3: Processing session status")
 
         when (result.type) {
-
             UssdParser.ResultType.SUCCESS -> {
-                UssdSessionManager.success()
+                try { UssdSessionManager.success() } catch (e: Exception) { Log.e(TAG, "Session error", e) }
             }
-
             UssdParser.ResultType.FAILED -> {
-                UssdSessionManager.failed()
+                try { UssdSessionManager.failed() } catch (e: Exception) { Log.e(TAG, "Session error", e) }
             }
-
             UssdParser.ResultType.WAITING -> {
-                UssdSessionManager.waiting()
+                try { UssdSessionManager.waiting() } catch (e: Exception) { Log.e(TAG, "Session error", e) }
             }
-
             else -> {}
         }
 
         if (result.type == UssdParser.ResultType.WAITING) {
-
-            if (UssdReplyManager.hasNext()) {
-
-                val reply = UssdReplyManager.next()
-
-                if (reply != null) {
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        sendReply(rootInActiveWindow, reply)
-                    }, 1200)
+            try {
+                if (UssdReplyManager.hasNext()) {
+                    val reply = UssdReplyManager.next()
+                    if (reply != null) {
+                        Handler(Looper.getMainLooper()).postDelayed({
+                            sendReply(rootInActiveWindow, reply)
+                        }, 1200)
+                    }
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Reply manager error", e)
             }
         }
 
-        Log.e(TAG, "STEP 4")
+        Log.e(TAG, "STEP 4: Sending result to backend")
 
         sendResultToBackend(
             message,
@@ -166,9 +156,7 @@ class UssdAccessibilityService : AccessibilityService() {
     }
 
     private fun collectNodeText(node: AccessibilityNodeInfo?): String {
-
         if (node == null) return ""
-
         val builder = StringBuilder()
 
         node.text?.let {
@@ -187,30 +175,21 @@ class UssdAccessibilityService : AccessibilityService() {
     }
 
     private fun isOnlyActionButtonText(value: String): Boolean {
-
         val tokens = value.split("\\s+".toRegex())
-
         if (tokens.isEmpty()) {
             return false
         }
-
         return tokens.all {
             ACTION_BUTTONS.contains(it.trim().uppercase())
         }
     }
 
     private fun clickCloseButton(root: AccessibilityNodeInfo?) {
-
         if (root == null) return
-
         ACTION_BUTTONS.forEach { action ->
-
             val nodes = root.findAccessibilityNodeInfosByText(action)
-
             if (!nodes.isNullOrEmpty()) {
-
                 val ok = nodes.first().performAction(AccessibilityNodeInfo.ACTION_CLICK)
-
                 Log.d(TAG, "Close clicked = $ok")
                 return
             }
@@ -218,79 +197,50 @@ class UssdAccessibilityService : AccessibilityService() {
     }
 
     private fun sendReply(root: AccessibilityNodeInfo?, reply: String) {
-
         if (root == null) return
-
         val editText = findEditText(root)
 
         if (editText == null) {
-            Log.d(TAG, "EditText not found")
+            logError("EditText not found for reply: $reply")
             return
         }
 
-        val args = Bundle()
-
-        args.putCharSequence(
-            AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-            reply
-        )
+        val args = Bundle().apply {
+            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, reply)
+        }
 
         val success = editText.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-
-        // Diagnostic only — kept local so it can never send an
-        // out-of-contract status ("DEBUG") to the backend.
         Log.d(TAG, "Reply Typed = $success")
 
         Handler(Looper.getMainLooper()).postDelayed({
-
             val clicked = clickSendButton(root)
-
             if (!clicked) {
-                Log.e(TAG, "SEND button not found")
+                logError("SEND button not found")
             }
-
         }, 500)
     }
 
     private fun findEditText(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
-
         if (node == null) return null
-
         if (node.className?.toString()?.contains("EditText", true) == true) {
             return node
         }
-
         for (i in 0 until node.childCount) {
-
             val result = findEditText(node.getChild(i))
-
-            if (result != null) {
-                return result
-            }
+            if (result != null) return result
         }
-
         return null
     }
 
     private fun clickSendButton(node: AccessibilityNodeInfo?): Boolean {
-
         if (node == null) return false
-
         val keywords = listOf("SEND", "OK", "YES", "NEXT", "CONTINUE", "GO")
 
         for (word in keywords) {
-
             val nodes = node.findAccessibilityNodeInfosByText(word)
-
             if (!nodes.isNullOrEmpty()) {
-
                 nodes.first().performAction(AccessibilityNodeInfo.ACTION_CLICK)
-
                 Log.d(TAG, "Clicked -> $word")
-
-                // Diagnostic only — kept local, not sent to backend.
-                Log.d(TAG, "Clicked button: $word")
-
                 return true
             }
         }
@@ -300,7 +250,6 @@ class UssdAccessibilityService : AccessibilityService() {
                 return true
             }
         }
-
         return false
     }
 
@@ -313,33 +262,28 @@ class UssdAccessibilityService : AccessibilityService() {
         status: String,
         clearPendingRequest: Boolean
     ) {
-
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
 
-        val reference = prefs.getString(KEY_REFERENCE, null)
-        val deviceId = prefs.getString(KEY_DEVICE_ID, null)
-        val secretKey = prefs.getString(KEY_SECRET_KEY, null)
+        val reference = prefs.getString(KEY_REFERENCE, "DEFAULT_REF_${System.currentTimeMillis()}")
+        val deviceId = prefs.getString(KEY_DEVICE_ID, "UNKNOWN_DEVICE")
+        val secretKey = prefs.getString(KEY_SECRET_KEY, "")
         val simSlot = prefs.getInt(KEY_SIM_SLOT, 0)
         val requestType = prefs.getString(KEY_REQUEST_TYPE, "USSD") ?: "USSD"
 
-        if (reference.isNullOrBlank() || deviceId.isNullOrBlank() || secretKey.isNullOrBlank()) {
-            return
+        val json = JSONObject().apply {
+            put("deviceId", deviceId ?: "")
+            put("secretKey", secretKey ?: "")
+            put("reference", reference ?: "")
+            put("status", status)
+            put("message", message)
+            put("response", message)
+            put("simSlot", simSlot)
+            put("requestType", requestType)
+            put("simId", prefs.getString("simId", ""))
+            put("balanceType", prefs.getString("balanceType", ""))
+            put("service", prefs.getString("service", ""))
+            put("network", prefs.getString("network", ""))
         }
-
-        val json = JSONObject()
-
-        json.put("deviceId", deviceId)
-        json.put("secretKey", secretKey)
-        json.put("reference", reference)
-        json.put("status", status)
-        json.put("message", message)
-        json.put("response", message)
-        json.put("simSlot", simSlot)
-        json.put("requestType", requestType)
-        json.put("simId", prefs.getString("simId", ""))
-        json.put("balanceType", prefs.getString("balanceType", ""))
-        json.put("service", prefs.getString("service", ""))
-        json.put("network", prefs.getString("network", ""))
 
         val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
 
@@ -348,23 +292,19 @@ class UssdAccessibilityService : AccessibilityService() {
             .post(body)
             .build()
 
-        Log.e(TAG, "STEP 6")
+        Log.e(TAG, "STEP 6: Enqueuing request to $RESULT_URL")
 
         client.newCall(request).enqueue(object : Callback {
-
             override fun onFailure(call: Call, e: IOException) {
-                Log.e(TAG, "STEP 7")
-                Log.e(TAG, "Backend Error", e)
+                Log.e(TAG, "STEP 7: Backend Connection Failure", e)
             }
 
             override fun onResponse(call: Call, response: Response) {
-
                 Log.e(TAG, "STEP 8")
-
                 response.use {
-
+                    val responseString = it.body?.string().orEmpty()
                     Log.e(TAG, "Backend Code = ${it.code}")
-                    Log.e(TAG, it.body?.string().orEmpty())
+                    Log.e(TAG, "Backend Response = $responseString")
 
                     if (it.isSuccessful && clearPendingRequest) {
                         clearPendingRequest(prefs)
@@ -385,8 +325,11 @@ class UssdAccessibilityService : AccessibilityService() {
             .apply()
     }
 
-    companion object {
+    private fun logError(message: String) {
+        Log.e(TAG, message)
+    }
 
+    companion object {
         private const val TAG = "AYAX_USSD"
         private const val PREFS_NAME = "AYAX_USSD"
 
