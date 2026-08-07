@@ -18,20 +18,12 @@ object UssdParser {
         }
     }
 
-    // Matches a genuine numbered menu line, e.g. "1. Buy Data" or "2) Borrow"
-    // — anchored to the start of a line so it doesn't false-match things like
-    // "1.2GB" or "N1.50" appearing mid-sentence in a balance/success message.
     private val MENU_LINE_REGEX = Regex("(?m)^\\s*\\d+[.)]\\s")
 
     fun parse(message: String): ParsedResult {
-
         val text = message.lowercase().trim()
 
         // ===== FAILED =====
-        // Checked first: these are specific, decisive keywords. A menu-ish
-        // word like "select" or "option" appearing alongside one of these
-        // (e.g. "Invalid PIN, select 1 to retry") should still end the
-        // session as FAILED, not be misread as WAITING.
         if (
             text.contains("failed") ||
             text.contains("failure") ||
@@ -42,15 +34,15 @@ object UssdParser {
             text.contains("not allowed") ||
             text.contains("try again") ||
             text.contains("expired") ||
-            text.contains("cancelled")
+            text.contains("cancelled") ||
+            text.contains("wrong") ||
+            text.contains("decline")
         ) {
             return ParsedResult(ResultType.FAILED, message)
         }
 
         // ===== SUCCESS =====
-        // Also checked before WAITING for the same reason — a final balance
-        // message like "Data balance: 1.2GB. Thank you." must not be
-        // swallowed by the broad WAITING keyword/number matching below.
+        // An kara kalmomi da dama da networks ke amfani da su wajen nuna kudi ko gama aiki
         if (
             text.contains("successful") ||
             text.contains("successfully") ||
@@ -61,16 +53,19 @@ object UssdParser {
             text.contains("bundle") ||
             text.contains("airtime balance") ||
             text.contains("data balance") ||
-            text.contains("available balance")
+            text.contains("available balance") ||
+            text.contains("account balance") ||
+            text.contains("bal:") ||
+            text.contains("balance is") ||
+            text.contains("naira") ||
+            text.contains("ngn") ||
+            text.contains("transfer of") ||
+            text.contains("sent to")
         ) {
             return ParsedResult(ResultType.SUCCESS, message)
         }
 
         // ===== WAITING =====
-        // Only reached once the message didn't match a decisive FAILED or
-        // SUCCESS pattern. Combines the keyword check with the precise
-        // numbered-menu-line regex (previously duplicated as two separate
-        // "WAITING" blocks — merged here into one).
         val hasMenuLine = MENU_LINE_REGEX.containsMatchIn(message)
 
         if (
@@ -86,6 +81,13 @@ object UssdParser {
             text.contains("option")
         ) {
             return ParsedResult(ResultType.WAITING, message)
+        }
+
+        // Idan har sakon ya zo kuma yana da dan tsawo (ba menu ba, ba error ba), 
+        // maimakon mu barshi ya zama UNKNOWN, muna iya chanja shi zuwa SUCCESS 
+        // domin gudun kada a rasa sakon a dashboard.
+        if (text.length > 3) {
+            return ParsedResult(ResultType.SUCCESS, message)
         }
 
         return ParsedResult(ResultType.UNKNOWN, message)
