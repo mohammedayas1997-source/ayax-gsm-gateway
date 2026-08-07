@@ -30,7 +30,6 @@ class MainActivity : ReactActivity() {
     }
 
     private fun isAccessibilityEnabled(): Boolean {
-
         val service =
             "$packageName/com.ayaxgsmgateway.accessibility.UssdAccessibilityService"
 

@@ -49,10 +49,7 @@ class SmsReceiver : BroadcastReceiver() {
     ) {
         if (context == null || intent == null) return
 
-        if (
-            intent.action !=
-            Telephony.Sms.Intents.SMS_RECEIVED_ACTION
-        ) {
+        if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) {
             return
         }
 
@@ -211,8 +208,6 @@ class SmsReceiver : BroadcastReceiver() {
                         )
                     }
 
-                    // Ko balance callback ya yi nasara ko ya gaza,
-                    // har yanzu mu adana SMS ɗin a inbox.
                     sendSmsToBackend(
                         deviceId = deviceId,
                         secretKey = secretKey,
@@ -494,7 +489,6 @@ class SmsReceiver : BroadcastReceiver() {
                                     responseBody
                             )
 
-                            // Kada a goge reference idan backend ya ƙi.
                             onComplete(false)
                         }
                     }

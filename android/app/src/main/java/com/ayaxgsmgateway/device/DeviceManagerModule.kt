@@ -1,23 +1,23 @@
 package com.ayaxgsmgateway.device
 
 import android.content.Intent
-import com.facebook.react.bridge.*
+import android.os.Build
 import com.ayaxgsmgateway.alarm.AlarmService
+import com.ayaxgsmgateway.security.GpsMonitor
 import com.ayaxgsmgateway.security.MotionService
 import com.ayaxgsmgateway.security.NetworkMonitor
-import com.ayaxgsmgateway.security.GpsMonitor
+import com.facebook.react.bridge.*
 
 class DeviceManagerModule(
     private val reactContext: ReactApplicationContext
 ) : ReactContextBaseJavaModule(reactContext) {
 
-    override fun getName(): String {
-        return "DeviceManagerModule"
-    }
+    override fun getName(): String = "DeviceManagerModule"
 
     @ReactMethod
     fun startAlarm(promise: Promise) {
         try {
+
             val intent = Intent(
                 reactContext,
                 AlarmService::class.java
@@ -25,21 +25,29 @@ class DeviceManagerModule(
                 action = AlarmService.ACTION_START
             }
 
-            reactContext.startForegroundService(intent)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                reactContext.startForegroundService(intent)
+            } else {
+                reactContext.startService(intent)
+            }
+
             promise.resolve(true)
 
-        } catch (error: Exception) {
+        } catch (e: Exception) {
+
             promise.reject(
                 "ALARM_START_ERROR",
-                error.message,
-                error
+                e.message,
+                e
             )
+
         }
     }
 
     @ReactMethod
     fun stopAlarm(promise: Promise) {
         try {
+
             val intent = Intent(
                 reactContext,
                 AlarmService::class.java
@@ -48,14 +56,17 @@ class DeviceManagerModule(
             }
 
             reactContext.startService(intent)
+
             promise.resolve(true)
 
-        } catch (error: Exception) {
+        } catch (e: Exception) {
+
             promise.reject(
                 "ALARM_STOP_ERROR",
-                error.message,
-                error
+                e.message,
+                e
             )
+
         }
     }
 
@@ -68,20 +79,25 @@ class DeviceManagerModule(
                 MotionService::class.java
             )
 
-            reactContext.startForegroundService(intent)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                reactContext.startForegroundService(intent)
+            } else {
+                reactContext.startService(intent)
+            }
 
             NetworkMonitor.start(reactContext)
             GpsMonitor.checkGps(reactContext)
 
             promise.resolve(true)
 
-        } catch (error: Exception) {
+        } catch (e: Exception) {
 
             promise.reject(
                 "MOTION_START_ERROR",
-                error.message,
-                error
+                e.message,
+                e
             )
+
         }
     }
 
@@ -98,13 +114,14 @@ class DeviceManagerModule(
 
             promise.resolve(true)
 
-        } catch (error: Exception) {
+        } catch (e: Exception) {
 
             promise.reject(
                 "MOTION_STOP_ERROR",
-                error.message,
-                error
+                e.message,
+                e
             )
+
         }
     }
 }

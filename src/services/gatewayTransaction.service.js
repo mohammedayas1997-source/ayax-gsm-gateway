@@ -16,85 +16,102 @@ exports.markCommandProcessing = async ({ reference, message }) => {
 };
 
 exports.markCommandSuccessful = async ({ reference, message }) => {
-  const command = await prisma.gsmCommand.update({
-    where: { reference },
-    data: {
-      status: "SUCCESSFUL",
-      response: message || "Successful",
-      completedAt: new Date(),
-    },
+  // Yin amfani da transaction domin tabbatar da cewa duka sun yi nasara tare
+  const result = await prisma.$transaction(async (tx) => {
+    const command = await tx.gsmCommand.update({
+      where: { reference },
+      data: {
+        status: "SUCCESSFUL",
+        response: message || "Successful",
+        completedAt: new Date(),
+      },
+    });
+
+    await tx.transaction.updateMany({
+      where: { reference },
+      data: {
+        status: "SUCCESSFUL",
+      },
+    });
+
+    return command;
   });
 
-  await prisma.transaction.updateMany({
-    where: { reference },
-    data: {
-      status: "SUCCESSFUL",
-    },
-  });
-
-  emitEvent("gsm-command-updated", { command });
+  emitEvent("gsm-command-updated", { command: result });
   emitEvent("transaction-updated", { reference, status: "SUCCESSFUL" });
 
-  return command;
+  return result;
 };
 
 exports.markCommandFailed = async ({ reference, message }) => {
-  const command = await prisma.gsmCommand.update({
-    where: { reference },
-    data: {
-      status: "FAILED",
-      response: message || "Failed",
-      completedAt: new Date(),
-    },
-  });
+  let updatedCommand;
+  let refundedUserId = null;
+  let newWalletBalance = null;
 
-  const transaction = await prisma.transaction.findFirst({
-    where: { reference },
-  });
-
-  if (transaction && transaction.status !== "FAILED") {
-    await prisma.transaction.update({
-      where: { id: transaction.id },
-      data: { status: "FAILED" },
+  // Yin amfani da Prisma transaction domin tsaron kudi (acid compliance)
+  await prisma.$transaction(async (tx) => {
+    updatedCommand = await tx.gsmCommand.update({
+      where: { reference },
+      data: {
+        status: "FAILED",
+        response: message || "Failed",
+        completedAt: new Date(),
+      },
     });
 
-    if (transaction.type === "DEBIT") {
-      const wallet = await prisma.wallet.findUnique({
-        where: { userId: transaction.userId },
+    const transaction = await tx.transaction.findFirst({
+      where: { reference },
+    });
+
+    if (transaction && transaction.status !== "FAILED") {
+      await tx.transaction.update({
+        where: { id: transaction.id },
+        data: { status: "FAILED" },
       });
 
-      if (wallet) {
-        const balanceBefore = wallet.balance;
-        const balanceAfter = balanceBefore + Number(transaction.amount);
-
-        await prisma.wallet.update({
+      if (transaction.type === "DEBIT") {
+        const wallet = await tx.wallet.findUnique({
           where: { userId: transaction.userId },
-          data: { balance: balanceAfter },
         });
 
-        await prisma.walletLedger.create({
-          data: {
-            userId: transaction.userId,
-            reference: `${reference}-REFUND`,
-            type: "CREDIT",
-            amount: transaction.amount,
-            balanceBefore,
-            balanceAfter,
-            module: "REFUND",
-            description: `Auto refund for failed transaction ${reference}`,
-          },
-        });
+        if (wallet) {
+          const balanceBefore = wallet.balance;
+          const balanceAfter = balanceBefore + Number(transaction.amount);
+          refundedUserId = transaction.userId;
+          newWalletBalance = balanceAfter;
 
-        emitEvent("wallet-updated", {
-          userId: transaction.userId,
-          balance: balanceAfter,
-        });
+          await tx.wallet.update({
+            where: { userId: transaction.userId },
+            data: { balance: balanceAfter },
+          });
+
+          await tx.walletLedger.create({
+            data: {
+              userId: transaction.userId,
+              reference: `${reference}-REFUND`,
+              type: "CREDIT",
+              amount: transaction.amount,
+              balanceBefore,
+              balanceAfter,
+              module: "REFUND",
+              description: `Auto refund for failed transaction ${reference}`,
+            },
+          });
+        }
       }
     }
-  }
+  });
 
-  emitEvent("gsm-command-updated", { command });
+  // Tura abubuwan da suka faru ta Socket bayan DB transaction ya gama lodi lafiya
+  emitEvent("gsm-command-updated", { command: updatedCommand });
   emitEvent("transaction-updated", { reference, status: "FAILED" });
 
-  return command;
+  if (refundedUserId !== null && newWalletBalance !== null) {
+    emitEvent("wallet-updated", {
+      userId: refundedUserId,
+      balance: newWalletBalance,
+    });
+  }
+
+  return updatedCommand;
 };

@@ -1,17 +1,31 @@
 const queue = [];
 let processing = false;
-
 let listeners = [];
 
 const notify = () => {
   const status = getQueueStatus();
-  listeners.forEach((listener) => listener(status));
+  listeners.forEach((listener) => {
+    try {
+      listener(status);
+    } catch (error) {
+      console.log("Error in queue status listener:", error?.message);
+    }
+  });
 };
 
 export const addToQueue = async (command, handler) => {
-  queue.push({ command, handler });
-  notify();
-  processQueue();
+  try {
+    if (!command || typeof handler !== "function") {
+      console.log("Invalid command or handler passed to queue");
+      return;
+    }
+
+    queue.push({ command, handler });
+    notify();
+    processQueue();
+  } catch (error) {
+    console.log("Failed to add to queue:", error?.message);
+  }
 };
 
 const processQueue = async () => {
@@ -25,11 +39,14 @@ const processQueue = async () => {
     notify();
 
     try {
-      await job.handler(job.command);
+      if (job && typeof job.handler === "function") {
+        await job.handler(job.command);
+      }
     } catch (error) {
-      console.log("Queue job failed:", error.message);
+      console.log("Queue job failed:", error?.message || error);
     }
 
+    // Jiran sakan 3 kafin a tafi ga umarni na gaba
     await wait(3000);
   }
 
@@ -45,11 +62,23 @@ export const getQueueStatus = () => ({
 });
 
 export const subscribeQueueStatus = (listener) => {
-  listeners.push(listener);
+  if (typeof listener !== "function") return () => {};
 
-  listener(getQueueStatus());
+  listeners.push(listener);
+  
+  try {
+    listener(getQueueStatus());
+  } catch (error) {
+    console.log("Error initializing queue listener:", error?.message);
+  }
 
   return () => {
     listeners = listeners.filter((item) => item !== listener);
   };
+};
+
+export const clearQueue = () => {
+  queue.length = 0;
+  processing = false;
+  notify();
 };

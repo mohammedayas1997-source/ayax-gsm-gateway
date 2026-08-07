@@ -8,10 +8,15 @@ import android.util.Log
 
 class DeviceStateReceiver : BroadcastReceiver() {
 
+    companion object {
+        private const val TAG = "AYAX_DEVICE_STATE"
+    }
+
     override fun onReceive(context: Context, intent: Intent) {
         try {
-            when (intent.action) {
+            val action = intent.action ?: return
 
+            when (action) {
                 Intent.ACTION_AIRPLANE_MODE_CHANGED -> {
                     val isAirplaneModeOn =
                         Settings.Global.getInt(
@@ -55,7 +60,7 @@ class DeviceStateReceiver : BroadcastReceiver() {
             }
         } catch (error: Exception) {
             Log.e(
-                "AYAX_DEVICE_STATE",
+                TAG,
                 "Device state receiver error",
                 error
             )

@@ -12,7 +12,11 @@ object UssdParser {
     data class ParsedResult(
         val type: ResultType,
         val message: String
-    )
+    ) {
+        override fun toString(): String {
+            return "ParsedResult(type=$type, message='$message')"
+        }
+    }
 
     // Matches a genuine numbered menu line, e.g. "1. Buy Data" or "2) Borrow"
     // — anchored to the start of a line so it doesn't false-match things like

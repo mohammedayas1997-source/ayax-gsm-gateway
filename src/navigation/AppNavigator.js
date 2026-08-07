@@ -15,9 +15,15 @@ export default function AppNavigator() {
 
   useEffect(() => {
     const checkDevice = async () => {
-      const token = await getDeviceToken();
-      setPaired(!!token);
-      setLoading(false);
+      try {
+        const token = await getDeviceToken();
+        setPaired(!!token);
+      } catch (error) {
+        console.log("Error checking device pairing state:", error?.message);
+        setPaired(false);
+      } finally {
+        setLoading(false);
+      }
     };
 
     checkDevice();

@@ -32,7 +32,6 @@ class GsmModule(private val reactContext: ReactApplicationContext) :
       }
 
       val smsManager = SmsManager.getDefault()
-
       val parts = smsManager.divideMessage(message)
 
       smsManager.sendMultipartTextMessage(
@@ -43,13 +42,15 @@ class GsmModule(private val reactContext: ReactApplicationContext) :
         null
       )
 
-      val result = Arguments.createMap()
-      result.putBoolean("success", true)
-      result.putString("phoneNumber", phoneNumber)
-      result.putString("message", message)
+      val result = Arguments.createMap().apply {
+        putBoolean("success", true)
+        putString("phoneNumber", phoneNumber)
+        putString("message", message)
+      }
 
       promise.resolve(result)
     } catch (e: Exception) {
+      Log.e(TAG, "sendSms failed", e)
       promise.reject("SMS_ERROR", e.message)
     }
   }
@@ -60,16 +61,15 @@ class GsmModule(private val reactContext: ReactApplicationContext) :
     promise: Promise
   ) {
     try {
-
-      UssdReplyManager.clear()
-
+      val replyList = mutableListOf<String>()
       for (i in 0 until replies.size()) {
-        UssdReplyManager.add(replies.getString(i) ?: "")
+        replies.getString(i)?.let { replyList.add(it) }
       }
-
+      
+      UssdReplyManager.addAll(replyList)
       promise.resolve(true)
-
     } catch (e: Exception) {
+      Log.e(TAG, "setUssdReplies failed", e)
       promise.reject("USSD_REPLY_ERROR", e.message)
     }
   }
@@ -95,15 +95,17 @@ class GsmModule(private val reactContext: ReactApplicationContext) :
         secretKey
       )
 
-      val result = Arguments.createMap()
-      result.putBoolean("success", true)
-      result.putString("phoneNumber", phoneNumber)
-      result.putString("message", message)
-      result.putInt("simSlot", simSlot)
-      result.putString("reference", reference)
+      val result = Arguments.createMap().apply {
+        putBoolean("success", true)
+        putString("phoneNumber", phoneNumber)
+        putString("message", message)
+        putInt("simSlot", simSlot)
+        putString("reference", reference)
+      }
 
       promise.resolve(result)
     } catch (e: Exception) {
+      Log.e(TAG, "sendSmsWithSim failed", e)
       promise.reject("SMS_ERROR", e.message)
     }
   }
@@ -117,7 +119,6 @@ class GsmModule(private val reactContext: ReactApplicationContext) :
     promise: Promise
   ) {
     try {
-
       if (
         reactContext.checkSelfPermission(Manifest.permission.CALL_PHONE)
         != PackageManager.PERMISSION_GRANTED
@@ -128,34 +129,33 @@ class GsmModule(private val reactContext: ReactApplicationContext) :
 
       val prefs = reactContext.getSharedPreferences(PREFS_USSD, Context.MODE_PRIVATE)
 
-      // Previously missing: without this, UssdAccessibilityService finds no
-      // "reference" in prefs and silently returns on every accessibility
-      // event, so nothing captured for a plain sendUssd() call ever reached
-      // the backend. Saved the same way sendUssdWithSim() already does it.
       prefs.edit()
         .putString("reference", reference)
         .putString("deviceId", deviceId)
         .putString("secretKey", secretKey)
         .putInt("simSlot", DEFAULT_SIM_SLOT)
+        .putString("ussdCode", ussdCode)
         .apply()
 
       val encodedHash = Uri.encode("#")
       val finalCode = ussdCode.replace("#", encodedHash)
 
-      val intent = Intent(Intent.ACTION_CALL)
-      intent.data = Uri.parse("tel:$finalCode")
-      intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$finalCode")).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      }
 
       reactContext.startActivity(intent)
 
-      val result = Arguments.createMap()
-      result.putBoolean("success", true)
-      result.putString("ussdCode", ussdCode)
-      result.putString("message", "USSD command started")
+      val result = Arguments.createMap().apply {
+        putBoolean("success", true)
+        putString("ussdCode", ussdCode)
+        putString("message", "USSD command started")
+      }
 
       promise.resolve(result)
 
     } catch (e: Exception) {
+      Log.e(TAG, "sendUssd failed", e)
       promise.reject("USSD_ERROR", e.message)
     }
   }
@@ -173,9 +173,7 @@ class GsmModule(private val reactContext: ReactApplicationContext) :
     network: String,
     promise: Promise
   ) {
-
     try {
-
       val prefs = reactContext.getSharedPreferences(PREFS_USSD, Context.MODE_PRIVATE)
 
       Log.d(TAG, "USSD=$ussdCode")
@@ -190,43 +188,31 @@ class GsmModule(private val reactContext: ReactApplicationContext) :
         .putString("balanceType", balanceType)
         .putString("service", service)
         .putString("network", network)
+        .putString("ussdCode", ussdCode)
         .apply()
 
       UssdHelper.sendUssd(
-
-        reactContext,
-
-        ussdCode,
-
-        simSlot,
-
-        { response ->
-
-          val map = Arguments.createMap()
-
-          map.putBoolean("success", true)
-          map.putString("response", response)
-          map.putString("reference", reference)
-          map.putInt("simSlot", simSlot)
-
+        context = reactContext,
+        ussdCode = ussdCode,
+        simSlot = simSlot,
+        onSuccess = { response ->
+          val map = Arguments.createMap().apply {
+            putBoolean("success", true)
+            putString("response", response)
+            putString("reference", reference)
+            putInt("simSlot", simSlot)
+          }
           promise.resolve(map)
-
         },
-
-        { error ->
-
+        onError = { error ->
           promise.reject("USSD_ERROR", error)
-
         }
-
       )
 
     } catch (e: Exception) {
-
+      Log.e(TAG, "sendUssdWithSim failed", e)
       promise.reject("USSD_ERROR", e.message)
-
     }
-
   }
 
   @ReactMethod
@@ -241,6 +227,7 @@ class GsmModule(private val reactContext: ReactApplicationContext) :
 
       promise.resolve(true)
     } catch (e: Exception) {
+      Log.e(TAG, "saveDeviceCredentials failed", e)
       promise.reject("SAVE_DEVICE_ERROR", e.message)
     }
   }
@@ -263,26 +250,27 @@ class GsmModule(private val reactContext: ReactApplicationContext) :
       val activeSims = subscriptionManager.activeSubscriptionInfoList
 
       activeSims?.forEach { sim ->
-        val item = Arguments.createMap()
-
-        item.putInt("subscriptionId", sim.subscriptionId)
-        item.putInt("slotIndex", sim.simSlotIndex)
-        item.putString("carrierName", sim.carrierName?.toString() ?: "Unknown")
-        item.putString("displayName", sim.displayName?.toString() ?: "Unknown")
-        item.putString("countryIso", sim.countryIso ?: "")
-        item.putString("number", sim.number ?: "")
-        item.putInt("mcc", sim.mcc)
-        item.putInt("mnc", sim.mnc)
-
+        val item = Arguments.createMap().apply {
+          putInt("subscriptionId", sim.subscriptionId)
+          putInt("slotIndex", sim.simSlotIndex)
+          putString("carrierName", sim.carrierName?.toString() ?: "Unknown")
+          putString("displayName", sim.displayName?.toString() ?: "Unknown")
+          putString("countryIso", sim.countryIso ?: "")
+          putString("number", sim.number ?: "")
+          putInt("mcc", sim.mcc)
+          putInt("mnc", sim.mnc)
+        }
         sims.pushMap(item)
       }
 
-      val result = Arguments.createMap()
-      result.putInt("simCount", activeSims?.size ?: 0)
-      result.putArray("sims", sims)
+      val result = Arguments.createMap().apply {
+        putInt("simCount", activeSims?.size ?: 0)
+        putArray("sims", sims)
+      }
 
       promise.resolve(result)
     } catch (e: Exception) {
+      Log.e(TAG, "getSimInfo failed", e)
       promise.reject("GSM_ERROR", e.message)
     }
   }

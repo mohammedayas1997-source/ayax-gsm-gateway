@@ -21,10 +21,17 @@ class MotionService : Service(), SensorEventListener {
     private lateinit var sensorManager: SensorManager
     private var lastAlertTime = 0L
 
+    companion object {
+        private const val NOTIFICATION_ID = 2001
+        private const val CHANNEL_ID = "ayax_motion"
+        private const val FORCE_THRESHOLD = 18.0
+        private const val ALERT_COOLDOWN = 60000L // 1 minute
+    }
+
     override fun onCreate() {
         super.onCreate()
 
-        startForeground(2001, createNotification())
+        startForeground(NOTIFICATION_ID, createNotification())
 
         sensorManager =
             getSystemService(SENSOR_SERVICE) as SensorManager
@@ -32,34 +39,45 @@ class MotionService : Service(), SensorEventListener {
         val accelerometer =
             sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
 
-        sensorManager.registerListener(
-            this,
-            accelerometer,
-            SensorManager.SENSOR_DELAY_NORMAL
-        )
+        if (accelerometer != null) {
+            sensorManager.registerListener(
+                this,
+                accelerometer,
+                SensorManager.SENSOR_DELAY_NORMAL
+            )
+        }
     }
 
     override fun onSensorChanged(event: SensorEvent) {
+        if (event.sensor.type != Sensor.TYPE_ACCELEROMETER) return
+
         val x = event.values[0]
         val y = event.values[1]
         val z = event.values[2]
 
         val force = sqrt((x * x + y * y + z * z).toDouble())
 
-        if (force > 18) {
+        if (force > FORCE_THRESHOLD) {
             val now = System.currentTimeMillis()
 
-            if (now - lastAlertTime > 60000) {
+            if (now - lastAlertTime > ALERT_COOLDOWN) {
                 lastAlertTime = now
 
                 SecurityManager.sendSecurityAlert(
                     this,
                     "DEVICE_MOVED",
-                    "Gateway device was moved or shaken."
+                    "Gateway device was moved or shaken (Force: ${force.toInt()})."
                 )
 
-                val alarmIntent = Intent(this, AlarmService::class.java)
-                startForegroundService(alarmIntent)
+                val alarmIntent = Intent(this, AlarmService::class.java).apply {
+                    putExtra("reason", "DEVICE_MOVED")
+                }
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(alarmIntent)
+                } else {
+                    startService(alarmIntent)
+                }
             }
         }
     }
@@ -67,30 +85,33 @@ class MotionService : Service(), SensorEventListener {
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     private fun createNotification(): Notification {
-        val channelId = "ayax_motion"
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                channelId,
+                CHANNEL_ID,
                 "Ayax Motion Security",
                 NotificationManager.IMPORTANCE_LOW
-            )
+            ).apply {
+                description = "Monitoring gateway device movement"
+            }
 
-            val manager =
-                getSystemService(NotificationManager::class.java)
-
-            manager.createNotificationChannel(channel)
+            val manager = getSystemService(NotificationManager::class.java)
+            manager?.createNotificationChannel(channel)
         }
 
-        return NotificationCompat.Builder(this, channelId)
+        return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Ayax Motion Security")
             .setContentText("Monitoring gateway device movement")
             .setSmallIcon(R.mipmap.ic_launcher)
+            .setOngoing(true)
             .build()
     }
 
     override fun onDestroy() {
-        sensorManager.unregisterListener(this)
+        try {
+            sensorManager.unregisterListener(this)
+        } catch (e: Exception) {
+            // Ignore if already unregistered
+        }
         super.onDestroy()
     }
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -32,13 +32,23 @@ export default function DashboardScreen({ navigation }) {
   });
 
   const [logs, setLogs] = useState([]);
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   const heartbeat = async () => {
     try {
       const res = await sendHeartbeat();
+      if (!isMounted.current) return;
       setStatus("ONLINE");
       setBattery(res?.device?.battery || 0);
     } catch (error) {
+      if (!isMounted.current) return;
       setStatus("OFFLINE");
     }
   };
@@ -46,29 +56,40 @@ export default function DashboardScreen({ navigation }) {
   const loadSimInfo = async () => {
     try {
       const info = await getSimInfo();
+      if (!isMounted.current) return;
       setSimInfo(info);
     } catch (error) {
-      Alert.alert("SIM Error", error.message);
+      if (!isMounted.current) return;
+      console.log("SIM Error:", error?.message);
     }
   };
 
   const syncGateway = async () => {
-    await heartbeat();
-    await loadSimInfo();
-    await syncSimsToBackend();
-    await syncLocationToBackend();
+    try {
+      await heartbeat();
+      await loadSimInfo();
+      await syncSimsToBackend();
+      await syncLocationToBackend();
+    } catch (error) {
+      console.log("Sync Gateway error:", error?.message);
+    }
   };
 
   useEffect(() => {
     syncGateway();
     connectGatewaySocket();
-    startMotionSecurity().catch((error) => {
-  console.log("Motion security error:", error.message);
-});
     
+    startMotionSecurity().catch((error) => {
+      console.log("Motion security error:", error?.message);
+    });
 
-    const unsubscribeQueue = subscribeQueueStatus(setQueueStatus);
-    const unsubscribeLogs = subscribeLogs(setLogs);
+    const unsubscribeQueue = subscribeQueueStatus((status) => {
+      if (isMounted.current) setQueueStatus(status);
+    });
+
+    const unsubscribeLogs = subscribeLogs((newLogs) => {
+      if (isMounted.current) setLogs(newLogs);
+    });
 
     const timer = setInterval(() => {
       syncGateway();
@@ -83,10 +104,14 @@ export default function DashboardScreen({ navigation }) {
   }, []);
 
   const logout = async () => {
-    disconnectGatewaySocket();
-    await clearDevice();
-    Alert.alert("Device cleared", "Pair this device again.");
-    navigation.replace("Pair");
+    try {
+      disconnectGatewaySocket();
+      await clearDevice();
+      Alert.alert("Device cleared", "Pair this device again.");
+      navigation.replace("Pair");
+    } catch (error) {
+      console.log("Logout error:", error?.message);
+    }
   };
 
   return (
@@ -122,7 +147,7 @@ export default function DashboardScreen({ navigation }) {
         {simInfo?.sims?.length > 0 ? (
           simInfo.sims.map((sim, index) => (
             <View key={index} style={styles.simCard}>
-              <Text style={styles.simTitle}>SIM {sim.slotIndex + 1}</Text>
+              <Text style={styles.simTitle}>SIM {(sim.slotIndex ?? index) + 1}</Text>
               <Text style={styles.simText}>
                 Carrier: {sim.carrierName || "Unknown"}
               </Text>
@@ -130,7 +155,7 @@ export default function DashboardScreen({ navigation }) {
                 Display: {sim.displayName || "Unknown"}
               </Text>
               <Text style={styles.simText}>
-                Number: {sim.number || "Hidden by Android"}
+                Number: {sim.number || sim.phoneNumber || "Hidden by Android"}
               </Text>
               <Text style={styles.simText}>
                 MCC/MNC: {sim.mcc}/{sim.mnc}

@@ -206,24 +206,14 @@ const handleUssdCommand = async (command) => {
     ussdCode,
     reference: command.reference,
     simSlot,
-
-    simId:
-        command.simId,
-
-    balanceType:
-        command.balanceType,
-
-    service:
-        command.service,
-
-    network:
-        command.network,
-});
+    simId: command.simId,
+    balanceType: command.balanceType,
+    service: command.service,
+    network: command.network,
+  });
 
   console.log("NATIVE RESULT");
   console.log(JSON.stringify(result, null, 2));
-
-  console.log("USSD native result:", result);
 
   const ussdResponse = String(
     result?.response ||
@@ -339,21 +329,21 @@ const handleCommand = async (command) => {
       case "BUY_DATA":
       case "BUY_AIRTIME":
       case "AIRTIME":
-      case "DATA":
+      case "DATA": {
+        const simSlot = command.simSlot ?? command.payload?.simSlot ?? 0;
+        
         await reportResult({
           reference: command.reference,
           status: "PROCESSING",
           message: "USSD command is being processed",
-          simSlot:
-            command.simSlot ??
-            command.payload?.simSlot,
+          simSlot,
         });
 
         await handleUssdCommand(command);
         console.log("USSD COMMAND STARTED");
-        console.log("USSD CODE:", ussdCode);
         console.log("SIM SLOT:", simSlot);
         return;
+      }
 
       default:
         throw new Error(
@@ -451,13 +441,13 @@ export const connectGatewaySocket = async () => {
   );
 
   socket.on("gateway-command", async (command) => {
-  console.log("=================================");
-  console.log("GATEWAY COMMAND RECEIVED");
-  console.log(JSON.stringify(command, null, 2));
-  console.log("=================================");
+    console.log("=================================");
+    console.log("GATEWAY COMMAND RECEIVED");
+    console.log(JSON.stringify(command, null, 2));
+    console.log("=================================");
 
-  queuedCommandHandler(command);
-});
+    queuedCommandHandler(command);
+  });
 
   socket.on("disconnect", (reason) => {
     console.log(

@@ -3,7 +3,7 @@ package com.ayaxgsmgateway.security
 import android.content.Context
 import android.content.Intent
 import android.location.LocationManager
-import android.provider.Settings
+import android.os.Build
 import com.ayaxgsmgateway.alarm.AlarmService
 
 object GpsMonitor {
@@ -13,7 +13,11 @@ object GpsMonitor {
             context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
 
         val gpsEnabled =
-            locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+            try {
+                locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+            } catch (e: Exception) {
+                false
+            }
 
         if (!gpsEnabled) {
             SecurityManager.sendSecurityAlert(
@@ -22,8 +26,15 @@ object GpsMonitor {
                 "GPS/Location was disabled on gateway device."
             )
 
-            val alarmIntent = Intent(context, AlarmService::class.java)
-            context.startForegroundService(alarmIntent)
+            val alarmIntent = Intent(context, AlarmService::class.java).apply {
+                putExtra("reason", "GPS_DISABLED")
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(alarmIntent)
+            } else {
+                context.startService(alarmIntent)
+            }
         }
     }
 }
