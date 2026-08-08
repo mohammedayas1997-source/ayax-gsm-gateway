@@ -16,6 +16,17 @@ exports.markCommandProcessing = async ({ reference, message }) => {
 };
 
 exports.markCommandSuccessful = async ({ reference, message }) => {
+  // TSARIN KARIYA (Guard): Idan sakon farko ne na farawa, kar a bar shi ya zama SUCCESSFUL da wuri
+  const msgLower = String(message || "").toLowerCase();
+  if (
+    msgLower.includes("ussd command started") ||
+    msgLower.includes("initiated successfully") ||
+    msgLower.includes("processing")
+  ) {
+    // Madadin mu yi successful, za mu mayar da shi PROCESSING ne kawai
+    return exports.markCommandProcessing({ reference, message });
+  }
+
   // Yin amfani da transaction domin tabbatar da cewa duka sun yi nasara tare
   const result = await prisma.$transaction(async (tx) => {
     const command = await tx.gsmCommand.update({
