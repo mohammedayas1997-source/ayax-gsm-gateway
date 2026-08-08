@@ -86,8 +86,7 @@ class UssdAccessibilityService : AccessibilityService() {
         val backendStatus = when (result.type) {
             UssdParser.ResultType.SUCCESS -> "SUCCESSFUL"
             UssdParser.ResultType.FAILED -> "FAILED"
-            UssdParser.ResultType.WAITING -> "PROCESSING"
-            else -> "SUCCESSFUL"
+            else -> "PROCESSING" // Kar a taba barin ya zama SUCCESSFUL da wuri sai dai idan UssdParser ya tabbatar
         }
 
         val isDuplicate =
