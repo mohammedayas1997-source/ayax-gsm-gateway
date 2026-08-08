@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
 import android.util.Log
@@ -99,9 +98,9 @@ object UssdHelper {
 
             context.startActivity(intent)
             
-            // Mun maidawa onSuccess bayani mara rudani ko kuma kawai mu bar shi yana cewa USSD initiated,
-            // amma Accessibility Service ce za ta kama ainihin sakamakon karshe (SUCCESSFUL/FAILED)
-            onSuccess("USSD initiated successfully")
+            // Mun canza wannan sakon domin kar ya zama kamar an gama aikin (SUCCESSFUL),
+            // muna sanar da app din cewa an fara tura command din ne kawai (PROCESSING/INITIATED)
+            onSuccess("USSD command started")
 
         } catch (e: Exception) {
             Log.e(TAG, "Dialer fallback failed", e)
