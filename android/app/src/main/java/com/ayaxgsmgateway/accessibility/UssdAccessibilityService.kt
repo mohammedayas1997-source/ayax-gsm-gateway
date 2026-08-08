@@ -1,6 +1,7 @@
 package com.ayaxgsmgateway.accessibility
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.os.Handler
@@ -40,37 +41,34 @@ class UssdAccessibilityService : AccessibilityService() {
     private var lastCapturedAt = 0L
     private var lastBackendStatus = ""
 
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        val info = AccessibilityServiceInfo().apply {
+            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
+                    AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
+                    AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED
+            feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
+            flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
+                    AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+            notificationTimeout = 100
+        }
+        serviceInfo = info
+        Log.d(TAG, "UssdAccessibilityService connected successfully.")
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
 
-        if (
-            event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
-            event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
-        ) {
-            return
-        }
-
-        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-        val reference = prefs.getString(KEY_REFERENCE, null)
-
-        // Idan babu reference, zamu iya bari amma mu duba ko akwai kiran da yake gudana
-        if (reference.isNullOrBlank()) {
-            Log.d(TAG, "No active reference found in SharedPreferences, but accessibility is listening.")
-            // Ba za mu fita nan take ba idan kana son a riƙa kama duk wani sako na USSD
-        }
-
-        val root = rootInActiveWindow ?: return
+        val root = rootInActiveWindow ?: event.source ?: return
 
         val eventText = event.text?.joinToString(" ")?.trim().orEmpty()
         val rootText = collectNodeText(root)
 
         val message = when {
-            rootText.isNotBlank() -> rootText
-            eventText.isNotBlank() -> eventText
+            rootText.isNotBlank() && !isOnlyActionButtonText(rootText) -> rootText
+            eventText.isNotBlank() && !isOnlyActionButtonText(eventText) -> eventText
             else -> ""
         }.trim()
-
-        Log.e(TAG, "STEP 1: Message captured -> $message")
 
         if (message.isBlank()) {
             return
@@ -83,13 +81,13 @@ class UssdAccessibilityService : AccessibilityService() {
         val now = SystemClock.elapsedRealtime()
         val result = UssdParser.parse(message)
 
-        Log.e(TAG, "STEP 2 = ${result.type}")
+        Log.e(TAG, "USSD Parsed Type: ${result.type} -> Message: $message")
 
         val backendStatus = when (result.type) {
             UssdParser.ResultType.SUCCESS -> "SUCCESSFUL"
             UssdParser.ResultType.FAILED -> "FAILED"
             UssdParser.ResultType.WAITING -> "PROCESSING"
-            else -> "SUCCESSFUL" // Mun mayar da UNKNOWN zuwa SUCCESSFUL ko PROCESSING domin kada a rasa sakon a dashboard
+            else -> "SUCCESSFUL"
         }
 
         val isDuplicate =
@@ -104,8 +102,6 @@ class UssdAccessibilityService : AccessibilityService() {
         lastCapturedMessage = message
         lastCapturedAt = now
         lastBackendStatus = backendStatus
-
-        Log.e(TAG, "STEP 3: Processing session status")
 
         when (result.type) {
             UssdParser.ResultType.SUCCESS -> {
@@ -135,15 +131,12 @@ class UssdAccessibilityService : AccessibilityService() {
             }
         }
 
-        Log.e(TAG, "STEP 4: Sending result to backend")
-
+        // Tura ainihin sakon (message) zuwa ga Backend ta yadda zai bayyana a dashboard
         sendResultToBackend(
             message,
             backendStatus,
             backendStatus == "SUCCESSFUL" || backendStatus == "FAILED"
         )
-
-        Log.e(TAG, "STEP 5")
 
         if (
             result.type == UssdParser.ResultType.SUCCESS ||
@@ -160,11 +153,17 @@ class UssdAccessibilityService : AccessibilityService() {
         val builder = StringBuilder()
 
         node.text?.let {
-            builder.append(it.toString()).append("\n")
+            val textVal = it.toString().trim()
+            if (textVal.isNotEmpty() && !ACTION_BUTTONS.contains(textVal.uppercase())) {
+                builder.append(textVal).append("\n")
+            }
         }
 
         node.contentDescription?.let {
-            builder.append(it.toString()).append("\n")
+            val descVal = it.toString().trim()
+            if (descVal.isNotEmpty() && !ACTION_BUTTONS.contains(descVal.uppercase())) {
+                builder.append(descVal).append("\n")
+            }
         }
 
         for (i in 0 until node.childCount) {
@@ -175,13 +174,10 @@ class UssdAccessibilityService : AccessibilityService() {
     }
 
     private fun isOnlyActionButtonText(value: String): Boolean {
-        val tokens = value.split("\\s+".toRegex())
-        if (tokens.isEmpty()) {
-            return false
-        }
-        return tokens.all {
-            ACTION_BUTTONS.contains(it.trim().uppercase())
-        }
+        val cleanVal = value.replace("\n", " ").trim()
+        val tokens = cleanVal.split("\\s+".toRegex())
+        if (tokens.isEmpty()) return false
+        return tokens.all { ACTION_BUTTONS.contains(it.trim().uppercase()) }
     }
 
     private fun clickCloseButton(root: AccessibilityNodeInfo?) {
@@ -189,8 +185,7 @@ class UssdAccessibilityService : AccessibilityService() {
         ACTION_BUTTONS.forEach { action ->
             val nodes = root.findAccessibilityNodeInfosByText(action)
             if (!nodes.isNullOrEmpty()) {
-                val ok = nodes.first().performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                Log.d(TAG, "Close clicked = $ok")
+                nodes.first().performAction(AccessibilityNodeInfo.ACTION_CLICK)
                 return
             }
         }
@@ -198,25 +193,16 @@ class UssdAccessibilityService : AccessibilityService() {
 
     private fun sendReply(root: AccessibilityNodeInfo?, reply: String) {
         if (root == null) return
-        val editText = findEditText(root)
-
-        if (editText == null) {
-            logError("EditText not found for reply: $reply")
-            return
-        }
+        val editText = findEditText(root) ?: return
 
         val args = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, reply)
         }
 
-        val success = editText.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-        Log.d(TAG, "Reply Typed = $success")
+        editText.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
 
         Handler(Looper.getMainLooper()).postDelayed({
-            val clicked = clickSendButton(root)
-            if (!clicked) {
-                logError("SEND button not found")
-            }
+            clickSendButton(root)
         }, 500)
     }
 
@@ -240,7 +226,6 @@ class UssdAccessibilityService : AccessibilityService() {
             val nodes = node.findAccessibilityNodeInfosByText(word)
             if (!nodes.isNullOrEmpty()) {
                 nodes.first().performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                Log.d(TAG, "Clicked -> $word")
                 return true
             }
         }
@@ -292,20 +277,13 @@ class UssdAccessibilityService : AccessibilityService() {
             .post(body)
             .build()
 
-        Log.e(TAG, "STEP 6: Enqueuing request to $RESULT_URL")
-
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                Log.e(TAG, "STEP 7: Backend Connection Failure", e)
+                Log.e(TAG, "Backend Connection Failure", e)
             }
 
             override fun onResponse(call: Call, response: Response) {
-                Log.e(TAG, "STEP 8")
                 response.use {
-                    val responseString = it.body?.string().orEmpty()
-                    Log.e(TAG, "Backend Code = ${it.code}")
-                    Log.e(TAG, "Backend Response = $responseString")
-
                     if (it.isSuccessful && clearPendingRequest) {
                         clearPendingRequest(prefs)
                     }
@@ -325,10 +303,6 @@ class UssdAccessibilityService : AccessibilityService() {
             .apply()
     }
 
-    private fun logError(message: String) {
-        Log.e(TAG, message)
-    }
-
     companion object {
         private const val TAG = "AYAX_USSD"
         private const val PREFS_NAME = "AYAX_USSD"
@@ -343,13 +317,12 @@ class UssdAccessibilityService : AccessibilityService() {
         private const val KEY_WAITING_SINCE = "waitingSince"
 
         private const val DUPLICATE_WINDOW_MS = 2500L
-
         private const val RESULT_URL = "https://api.ayaxapis.com/api/v1/gateway/result"
 
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
         private val ACTION_BUTTONS = setOf(
-            "OK", "SEND", "YES", "NEXT", "GO", "CONTINUE", "DONE", "CLOSE", "DISMISS"
+            "OK", "SEND", "YES", "NEXT", "GO", "CONTINUE", "DONE", "CLOSE", "DISMISS", "CANCEL"
         )
     }
 }
