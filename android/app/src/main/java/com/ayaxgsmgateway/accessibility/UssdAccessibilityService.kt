@@ -102,10 +102,16 @@ class UssdAccessibilityService : AccessibilityService() {
 
         Log.e(TAG, "USSD Parsed Type: ${result.type} -> Message: $message")
 
+        // IDAN HAR BA SUCCESS BA KUMA BA FAILED BA, KAR A Tura shi a matsayin wanda ya kammala.
+        // Muna barin shi kawai yana jira (WAITING / PROCESSING) har sai ainihin sakamakon ya fito.
+        if (result.type == UssdParser.ResultType.UNKNOWN && !message.contains("balance", true) && !message.contains("naira", true) && !message.contains("₦", true)) {
+            return
+        }
+
         val backendStatus = when (result.type) {
             UssdParser.ResultType.SUCCESS -> "SUCCESSFUL"
             UssdParser.ResultType.FAILED -> "FAILED"
-            else -> "PROCESSING"
+            else -> "PROCESSING" // Ko kuma "WAITING" dangane da yadda kake son backend ɗinka ya karɓa
         }
 
         val isDuplicate =
@@ -149,6 +155,8 @@ class UssdAccessibilityService : AccessibilityService() {
             }
         }
 
+        // Tura sakamako zuwa backend kawai idan ya zama SUCCESS ko FAILED ne, 
+        // ko kuma idan kana son ganin duk wani mataki, ka tabbatar ba a sa use "SUCCESSFUL" ba sai da gaske.
         sendResultToBackend(
             message,
             backendStatus,
