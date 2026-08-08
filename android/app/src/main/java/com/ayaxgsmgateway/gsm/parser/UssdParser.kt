@@ -41,8 +41,26 @@ object UssdParser {
             return ParsedResult(ResultType.FAILED, message)
         }
 
+        // ===== WAITING (MENU / OPTIONS) =====
+        // Mun fara duba WAITING da farko domin idan saƙon menu ne mai lamba (misali 1. Buy 2. Check), kar a dauke shi a matsayin SUCCESS
+        val hasMenuLine = MENU_LINE_REGEX.containsMatchIn(message)
+
+        if (
+            hasMenuLine ||
+            text.contains("reply with") ||
+            text.contains("reply") ||
+            text.contains("select") ||
+            text.contains("choose") ||
+            text.contains("enter") ||
+            text.contains("input") ||
+            text.contains("press") ||
+            text.contains("option")
+        ) {
+            return ParsedResult(ResultType.WAITING, message)
+        }
+
         // ===== SUCCESS =====
-        // An kara kalmomi da dama da networks ke amfani da su wajen nuna kudi ko gama aiki
+        // Sai a tabbatar cewa SUCCESS zai fito ne kawai idan akwai takamaiman alamun cewa an kammala aiki ko an samu sakamako
         if (
             text.contains("successful") ||
             text.contains("successfully") ||
@@ -60,36 +78,15 @@ object UssdParser {
             text.contains("naira") ||
             text.contains("ngn") ||
             text.contains("transfer of") ||
-            text.contains("sent to")
+            text.contains("sent to") ||
+            text.contains("₦") ||
+            Regex("\\b[0-9]+(?:\\.[0-9]+)?\\s*(?:gb|mb|kb|gigs?)\\b").containsMatchIn(text)
         ) {
             return ParsedResult(ResultType.SUCCESS, message)
         }
 
-        // ===== WAITING =====
-        val hasMenuLine = MENU_LINE_REGEX.containsMatchIn(message)
-
-        if (
-            hasMenuLine ||
-            text.contains("reply with") ||
-            text.contains("reply") ||
-            text.contains("select") ||
-            text.contains("choose") ||
-            text.contains("enter") ||
-            text.contains("input") ||
-            text.contains("press") ||
-            text.contains("send") ||
-            text.contains("option")
-        ) {
-            return ParsedResult(ResultType.WAITING, message)
-        }
-
-        // Idan har sakon ya zo kuma yana da dan tsawo (ba menu ba, ba error ba), 
-        // maimakon mu barshi ya zama UNKNOWN, muna iya chanja shi zuwa SUCCESS 
-        // domin gudun kada a rasa sakon a dashboard.
-        if (text.length > 3) {
-            return ParsedResult(ResultType.SUCCESS, message)
-        }
-
+        // Idan har ba menu bane, ba error bane, kuma babu alamar nasara/kudi a ciki, 
+        // muna mayar da shi UNKNOWN ko WAITING maimakon mu saurin cewa shi SUCCESS ne.
         return ParsedResult(ResultType.UNKNOWN, message)
     }
 }

@@ -78,6 +78,25 @@ class UssdAccessibilityService : AccessibilityService() {
             return
         }
 
+        // Tace saƙonni marasa ma'ana ko waɗanda suke na wucin gadi ne kawai
+        if (message.contains("dispatched successfully", ignoreCase = true) ||
+            message.contains("USSD running", ignoreCase = true) ||
+            message.length < 3) {
+            return
+        }
+
+        // Ƙara lokacin jiran amsa (delay) domin ba wa ainihin sakon USSD damar kammala lodi
+        Handler(Looper.getMainLooper()).postDelayed({
+            processUssdMessage(root)
+        }, 1200)
+    }
+
+    private fun processUssdMessage(root: AccessibilityNodeInfo) {
+        val rootText = collectNodeText(root)
+        val message = if (rootText.isNotBlank() && !isOnlyActionButtonText(rootText)) rootText else lastCapturedMessage
+        
+        if (message.isBlank() || isOnlyActionButtonText(message)) return
+
         val now = SystemClock.elapsedRealtime()
         val result = UssdParser.parse(message)
 
@@ -86,7 +105,7 @@ class UssdAccessibilityService : AccessibilityService() {
         val backendStatus = when (result.type) {
             UssdParser.ResultType.SUCCESS -> "SUCCESSFUL"
             UssdParser.ResultType.FAILED -> "FAILED"
-            else -> "PROCESSING" // Kar a taba barin ya zama SUCCESSFUL da wuri sai dai idan UssdParser ya tabbatar
+            else -> "PROCESSING"
         }
 
         val isDuplicate =
@@ -130,7 +149,6 @@ class UssdAccessibilityService : AccessibilityService() {
             }
         }
 
-        // Tura ainihin sakon (message) zuwa ga Backend ta yadda zai bayyana a dashboard
         sendResultToBackend(
             message,
             backendStatus,

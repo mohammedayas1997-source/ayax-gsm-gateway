@@ -6,11 +6,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
-import android.telephony.TelephonyManager
 import android.util.Log
 
 object UssdHelper {
@@ -49,8 +46,6 @@ object UssdHelper {
                 subscriptionId
             )
 
-            // A matakan real-life, amfani da dialer fallback (ACTION_CALL) tare da daidaitattun extras
-            // shi ne yake ba da damar Accessibility Service ta kama sakon USSD ba tare da katsewa ba.
             openDialerFallback(
                 context,
                 ussdCode,
@@ -103,7 +98,10 @@ object UssdHelper {
             }
 
             context.startActivity(intent)
-            onSuccess("USSD Intent dispatched successfully")
+            
+            // Mun maidawa onSuccess bayani mara rudani ko kuma kawai mu bar shi yana cewa USSD initiated,
+            // amma Accessibility Service ce za ta kama ainihin sakamakon karshe (SUCCESSFUL/FAILED)
+            onSuccess("USSD initiated successfully")
 
         } catch (e: Exception) {
             Log.e(TAG, "Dialer fallback failed", e)
