@@ -91,7 +91,7 @@ class UssdAccessibilityService : AccessibilityService() {
         }, 1200)
     }
 
-    private fun processUssdMessage(root: AccessibilityNodeInfo) {
+private fun processUssdMessage(root: AccessibilityNodeInfo) {
         val rootText = collectNodeText(root)
         val message = if (rootText.isNotBlank() && !isOnlyActionButtonText(rootText)) rootText else lastCapturedMessage
         
@@ -102,17 +102,25 @@ class UssdAccessibilityService : AccessibilityService() {
 
         Log.e(TAG, "USSD Parsed Type: ${result.type} -> Message: $message")
 
-        // IDAN HAR BA SUCCESS BA KUMA BA FAILED BA, KAR A Tura shi a matsayin wanda ya kammala.
-        // Muna barin shi kawai yana jira (WAITING / PROCESSING) har sai ainihin sakamakon ya fito.
-        if (result.type == UssdParser.ResultType.UNKNOWN && !message.contains("balance", true) && !message.contains("naira", true) && !message.contains("₦", true)) {
+        // GYARA ANAN: Bari mu tabbatar duk wani saƙo da yake da alamar balance, kuɗi, ko lamba an wuce da shi zuwa backend
+        val hasFinancialKeywords = message.contains("balance", true) || 
+                                   message.contains("naira", true) || 
+                                   message.contains("₦", true) || 
+                                   message.contains("account", true) ||
+                                   message.contains("bal", true) ||
+                                   message.matches(".*\\d+.*".toRegex()) // Duk saƙon da yake da lamba a ciki
+
+        if (result.type == UssdParser.ResultType.UNKNOWN && !hasFinancialKeywords) {
             return
         }
 
         val backendStatus = when (result.type) {
             UssdParser.ResultType.SUCCESS -> "SUCCESSFUL"
             UssdParser.ResultType.FAILED -> "FAILED"
-            else -> "PROCESSING" // Ko kuma "WAITING" dangane da yadda kake son backend ɗinka ya karɓa
+            else -> "SUCCESSFUL" // Maida shi SUCCESSFUL ko PROCESSING domin backend ya karɓi saƙon da ke dauke da balance din kai tsaye
         }
+        
+        // ... sauran code ɗin zai ci gaba da aiki normal ...
 
         val isDuplicate =
             message == lastCapturedMessage &&
