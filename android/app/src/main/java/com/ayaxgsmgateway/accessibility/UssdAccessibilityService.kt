@@ -301,6 +301,7 @@ private fun processUssdMessage(root: AccessibilityNodeInfo) {
             put("balanceType", prefs.getString("balanceType", ""))
             put("service", prefs.getString("service", ""))
             put("network", prefs.getString("network", ""))
+            put("phoneNumber", prefs.getString("phoneNumber", ""))
         }
 
         val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
