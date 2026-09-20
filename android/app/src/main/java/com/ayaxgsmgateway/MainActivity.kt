@@ -23,7 +23,7 @@ class MainActivity : ReactActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // HANA WAYAR YIN SLEEP KO KASHE SCREEN 24/7
+        // Hana wayar yin barci / kashe screen
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         if (!isAccessibilityEnabled()) {
