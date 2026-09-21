@@ -28,9 +28,13 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Bundle React Native JS
+      - name: Prepare Assets & Registration Properties
         run: |
           mkdir -p android/app/src/main/assets
+          echo "CZ05PDSA2SDWMAAAAAAAAAAAAA" > android/app/src/main/assets/adi-registration.properties
+
+      - name: Bundle React Native JS
+        run: |
           npx react-native bundle \
             --platform android \
             --dev false \
@@ -47,5 +51,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: AyaxGSMGateway-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: AyaxGSMGateway-debug-apks
+          path: android/app/build/outputs/apk/debug/*.apk
