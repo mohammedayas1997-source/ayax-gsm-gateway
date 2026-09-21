@@ -28,19 +28,20 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Prepare Assets & Registration Properties
-        run: |
-          mkdir -p android/app/src/main/assets
-          echo "CZ05PDSA2SDWMAAAAAAAAAAAAA" > android/app/src/main/assets/adi-registration.properties
-
       - name: Bundle React Native JS
         run: |
+          mkdir -p android/app/src/main/assets
           npx react-native bundle \
             --platform android \
             --dev false \
             --entry-file index.js \
             --bundle-output android/app/src/main/assets/index.android.bundle \
             --assets-dest android/app/src/main/res
+
+      - name: Write ADI Verification Properties
+        run: |
+          mkdir -p android/app/src/main/assets
+          echo "CZ05PDSA2SDWMAAAAAAAAAAAAA" > android/app/src/main/assets/adi-registration.properties
 
       - name: Make Gradle executable
         run: chmod +x android/gradlew
